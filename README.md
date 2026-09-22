@@ -15,6 +15,7 @@
 | 패키지명 | 버전 | 설명 | 패키지 링크 | 상세 문서 |
 | :--- | :---: | :--- | :---: | :---: |
 | [`sqla-autoconfig`](./sqla-autoconfig) | `v0.1.0` | 데이터베이스 자동 구성 및 고동시성 커넥션 풀 관리 라이브러리 (SQLAlchemy 2.0) | [README 바로가기](./sqla-autoconfig/README.md) | [Docs](./docs/sqla-autoconfig/) |
+| [`courier`](./courier) | `v0.1.0` | 고신뢰성 외부 API 전령 및 통일된 응답(Result 패턴) 프레임워크 (HTTPX & Pydantic v2) | [README 바로가기](./courier/README.md) | [Docs](./docs/courier/) |
 
 > 각 패키지의 설치 방법, 환경변수/YAML/JSON 설정 예제, 상세 사용법은 해당 패키지 디렉토리의 `README.md`를 참조해 주세요.
 
@@ -25,6 +26,7 @@
 각 패키지별 기획, 아키텍처(ADR), TDD 로그, 코드 리뷰, QA 및 배포 명세서는 `docs/{패키지명}/` 하위에서 체계적으로 관리됩니다:
 
 - [sqla-autoconfig 산출물 문서 바로가기](./docs/sqla-autoconfig/)
+- [courier 산출물 문서 바로가기](./docs/courier/)
 
 ---
 
