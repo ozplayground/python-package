@@ -9,7 +9,7 @@
 
 ## 1. 배경 및 컨텍스트 (Context & Problem Statement)
 
-대형 언어 모델(LLM) 기반의 자율 에이전트 시스템이 단순한 단일 프롬프트 챗봇에서 다중 에이전트(Multi-Agent) 협업 체계로 발전하면서, 실무 엔지니어링 현장에서는 기존 에이전트 프레임워크들의 구조적 한계가 드러나고 있습니다. 기획 산출물([`01_PRD.md`](../spec-writer/01_PRD.md), [`02_FUNCTIONAL_SPECIFICATION.md`](../spec-writer/02_FUNCTIONAL_SPECIFICATION.md), [`03_POLICIES_AND_EDGES.md`](../spec-writer/03_POLICIES_AND_EDGES.md), [`fsd/AGENT_HARNESS_SPECIFICATION.md`](../spec-writer/fsd/AGENT_HARNESS_SPECIFICATION.md)) 및 시장 벤치마킹([`01_MARKET_BENCHMARK.md`](../market-analyst/01_MARKET_BENCHMARK.md))을 검토한 결과, 상용 엔터프라이즈 환경에서 직면하는 핵심 과제는 다음과 같습니다:
+대형 언어 모델(LLM) 기반의 자율 에이전트 시스템이 단순한 단일 프롬프트 챗봇에서 다중 에이전트(Multi-Agent) 협업 체계로 발전하면서, 실무 엔지니어링 현장에서는 기존 에이전트 프레임워크들의 구조적 한계가 드러나고 있습니다. 기획 산출물([`01_PRD.md`](../spec-writer/01_PRD.md), [`02_FUNCTIONAL_SPECIFICATION.md`](../spec-writer/02_FUNCTIONAL_SPECIFICATION.md), [`03_POLICIES_AND_EDGES.md`](../spec-writer/03_POLICIES_AND_EDGES.md), [`fsd/HARNESS_SPECIFICATION.md`](../spec-writer/fsd/HARNESS_SPECIFICATION.md) 등 6대 모듈러 FSD) 및 시장 벤치마킹([`01_MARKET_BENCHMARK.md`](../market-analyst/01_MARKET_BENCHMARK.md))을 검토한 결과, 상용 엔터프라이즈 환경에서 직면하는 핵심 과제는 다음과 같습니다:
 
 1. **프롬프트와 소스코드의 강결합으로 인한 운영 오버헤드**:
    - 기존 프레임워크(CrewAI, PydanticAI 등)는 에이전트의 페르소나, 시스템 지시문, 도구 권한을 파이썬 클래스와 함수 내부에 하드코딩합니다. 이로 인해 프롬프트나 코딩 규칙을 한 줄 수정할 때마다 파이썬 코드를 다시 빌드하고 배포 파이프라인을 태워야 하는 비효율이 발생합니다.
