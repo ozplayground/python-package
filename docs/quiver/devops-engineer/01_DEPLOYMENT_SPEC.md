@@ -9,37 +9,39 @@
 
 ## 1. 패키지 빌드 및 배포 산출물 명세 (Package Build & Artifact Specification)
 
-`quiver`는 Python 3.10 이상을 지원하는 현대적 엔지니어링 유틸리티 라이브러리입니다. 외부 서드파티 런타임 종속성이 전혀 없는 **Zero-Dependency**($0$ External Dependencies) 순수 파이썬 라이브러리로 기획 및 개발되었으며, 표준 `hatchling` 빌드 백엔드를 통해 순수 파이썬 휠(Pure Python Wheel)과 소스 배포판(sdist)을 생성합니다.
+`quiver`는 백엔드 애플리케이션 및 데이터 처리 파이프라인에서 공통으로 사용되는 유틸리티 패키지입니다. 유틸리티 성격의 라이브러리가 서드파티 런타임 의존성을 가질 경우, 이를 가져다 쓰는 상위 서비스와 의존성 버전 충돌(Dependency Hell)을 유발하거나 취약점 감사(Audit) 대상이 불필요하게 늘어납니다.
+
+따라서 `quiver`는 외부 런타임 종속성을 배제한 **Zero-Dependency**(`dependencies = []`) 원칙을 채택하였으며, 표준 `hatchling` 빌드 백엔드를 통해 순수 파이썬 휠(Pure Python Wheel)과 소스 배포판(sdist)을 생성합니다.
 
 ### 1.1 빌드 산출물 사양 (Build Artifacts)
 
-| 패키지 유형 | 파일명 | 형식 | 빌드 상태 | 파일 크기 | SHA-256 무결성 체크섬 | 규격 및 호환성 |
+| 패키지 유형 | 파일명 | 형식 | 빌드 상태 | 파일 크기 | SHA-256 무결성 체크섬 | 규격 및 플랫폼 태그 |
 | :--- | :--- | :---: | :---: | :---: | :--- | :--- |
-| **Pure Python Wheel** | `quiver-0.1.0-py3-none-any.whl` | Wheel (`zip`) | **BUILD SUCCESS** | 13,649 B (~13.4 KB) | `58c5024927b5d80767b83cc5dd1f3b13c975989f16a6797a8bcac55b5137dd0a` | PEP 427 호환 (`py3-none-any`) |
-| **Source Distribution (sdist)** | `quiver-0.1.0.tar.gz` | `tar.gz` | **BUILD SUCCESS** | 42,002 B (~41.1 KB) | `e30b31009432b254899b58c47723c8e52ec72055fcfab780cefce98cc863c50d` | POSIX tar archive (gzip 압축) |
+| **Pure Python Wheel** | `quiver-0.1.0-py3-none-any.whl` | Wheel (`zip`) | **BUILD SUCCESS** | 13,649 B (~13.6 KB) | `58c5024927b5d80767b83cc5dd1f3b13c975989f16a6797a8bcac55b5137dd0a` | PEP 427 (`py3-none-any`) |
+| **Source Distribution (sdist)** | `quiver-0.1.0.tar.gz` | `tar.gz` | **BUILD SUCCESS** | 42,002 B (~42.0 KB) | `e30b31009432b254899b58c47723c8e52ec72055fcfab780cefce98cc863c50d` | POSIX tar archive (gzip 압축) |
 
 > [!NOTE]
-> 빌드 수행 환경: `macOS Darwin 24.3.0 (arm64)`, `Python 3.11.9`, `uv 0.6.x` 및 `hatchling 1.27.x`.
-> 순수 파이썬 패키지이므로 플랫폼 태그는 `any`, 파이썬 ABI는 `none`으로 지정되어 OS 및 CPU 아키텍처에 종속되지 않습니다.
+> 빌드 환경: `macOS Darwin 24.3.0 (arm64)`, `Python 3.11.9`, `uv 0.6.x` 및 `hatchling 1.27.x`.  
+> C 확장 모듈이 없는 순수 파이썬 패키지이므로 플랫폼 태그는 `any`, ABI는 `none`으로 지정되어 OS나 CPU 아키텍처 구분 없이 동일한 휠을 설치할 수 있습니다.
 
 ---
 
 ### 1.2 빌드 산출물 내부 파일 트리 무결성 검증
 
-순수 파이썬 휠(`dist/quiver-0.1.0-py3-none-any.whl`) 및 sdist 내부 압축 아카이브를 전수 검증한 결과는 다음과 같습니다:
+순수 파이썬 휠(`dist/quiver-0.1.0-py3-none-any.whl`) 및 소스 배포판 내부 아카이브를 전수 검사하여 누락 파일이나 불필요한 캐시가 포함되지 않았음을 확인하였습니다.
 
 ```text
 dist/quiver-0.1.0-py3-none-any.whl (PEP 427 Wheel)
 ├── quiver/
 │   ├── __init__.py                  # 최상위 공개 인터페이스 (37개 공개 심볼 __all__ 노출)
-│   ├── behavior.py                  # 고차 함수 제어 및 합성 (pipe, curry, memoize, retry 등)
-│   ├── collections.py               # 불변 컬렉션 연산 (chunk, flatten, deep_merge 등)
-│   ├── py.typed                     # PEP 561 타입 마커 (정적 분석기 완벽 지원)
-│   ├── scope.py                     # 스코프 확장 및 널 안전 (let, also, coalesce 등)
-│   ├── strings.py                   # 문자열 변환 및 개인정보 마스킹 (to_snake_case 등)
-│   └── timing.py                    # 고정밀 시간 계측 및 속도 제어 (Stopwatch, RateLimiter)
+│   ├── behavior.py                  # 고차 함수 제어 및 실행 (pipe, curry, memoize, retry 등)
+│   ├── collections.py               # 불변 컬렉션 조작 (chunk, flatten, deep_merge 등)
+│   ├── py.typed                     # PEP 561 정적 타입 마커
+│   ├── scope.py                     # 스코프 함수 및 널 안전 (let, also, coalesce 등)
+│   ├── strings.py                   # 문자열 정규화 및 개인정보 마스킹 (to_snake_case 등)
+│   └── timing.py                    # 고정밀 단조 시계 계측 및 속도 제어 (Stopwatch, RateLimiter)
 └── quiver-0.1.0.dist-info/
-    ├── METADATA                     # 패키지 메타데이터 (PEP 566 / 2.5 규격)
+    ├── METADATA                     # 패키지 메타데이터 (PEP 566 / Version 2.5 규격)
     ├── WHEEL                        # Wheel 빌드 정보 (Tag: py3-none-any)
     └── RECORD                       # 파일별 SHA-256 해시 및 바이트 수
 ```
@@ -47,22 +49,22 @@ dist/quiver-0.1.0-py3-none-any.whl (PEP 427 Wheel)
 ```text
 dist/quiver-0.1.0.tar.gz (Source Distribution)
 └── quiver-0.1.0/
-    ├── quiver/                      # 코어 패키지 모듈 및 py.typed
+    ├── quiver/                      # 패키지 소스 모듈 및 py.typed
     ├── tests/                       # 전체 유닛/동시성 테스트 스위트 (6개 테스트 파일)
-    ├── pyproject.toml               # PEP 621 선언적 패키지 빌드 명세서
-    ├── README.md                    # 패키지 소개 및 빠른 시작 문서
-    ├── uv.lock                      # 락 파일
-    ├── .gitignore                   # 형상 관리 제외 설정
+    ├── pyproject.toml               # PEP 621 선언적 빌드 명세
+    ├── README.md                    # 패키지 사용 가이드
+    ├── uv.lock                      # 의존성 잠금 파일
+    ├── .gitignore                   # 형상 관리 제외 목록
     └── PKG-INFO                     # sdist 메타데이터 규격
 ```
 
 ---
 
-### 1.3 Zero-Dependency (런타임 의존성 0개) 및 PEP 561 패키징 검증
+### 1.3 Zero-Dependency (런타임 의존성 0개) 및 PEP 561 검증
 
 #### 1) 런타임 의존성 0개 검증 (`dependencies = []`)
-- [`pyproject.toml`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/pyproject.toml)에 `dependencies = []`로 정의되어 있으며, 프로덕션 런타임에 외부 서드파티 라이브러리를 일체 요구하지 않습니다.
-- 생성된 Wheel의 `METADATA` 파일 검증:
+- [`pyproject.toml`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/pyproject.toml)에 `dependencies = []`로 명시되어 있으며, 런타임 환경에서 서드파티 라이브러리를 일체 요구하지 않습니다.
+- 생성된 휠의 `METADATA` 파일 분석 결과:
   ```http
   Metadata-Version: 2.5
   Name: quiver
@@ -74,37 +76,39 @@ dist/quiver-0.1.0.tar.gz (Source Distribution)
   Requires-Dist: pytest-cov>=4.1.0; extra == 'dev'
   Requires-Dist: pytest>=8.0.0; extra == 'dev'
   ```
-  `Requires-Dist`에 명시된 항목은 개발 환경 전용(`extra == 'dev'`)이며, 기본 설치 시 어떠한 외부 패키지도 설치되지 않습니다.
-- **클린 격리 환경 설치 검증 (`uv pip install`)**:
-  - 패키지 의존성 해석(Resolution) 소요 시간: **1ms**
+  `Requires-Dist`에 명시된 항목은 개발/테스트 전용(`extra == 'dev'`)이며, 일반 배포 설치 시 설치되는 외부 패키지는 없습니다.
+- **격리 가상환경 설치 검증 (`uv pip install`)**:
+  - 패키지 의존성 해석(Resolution): **1ms**
   - 설치(Installation) 소요 시간: **0.96ms**
-  - 신규 설치된 서드파티 패키지 수: **0개** (`+ quiver==0.1.0` 단일 항목만 설치됨)
+  - 설치된 외부 패키지 수: **0개** (`+ quiver==0.1.0` 단일 항목만 설치됨)
 
 #### 2) PEP 561 정적 타입 패키징 검증 ([`quiver/py.typed`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/py.typed))
-- 패키지 디렉토리 루트에 [`quiver/py.typed`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/py.typed) 마커 파일이 배치되어 있습니다.
-- 휠 아카이브 내부에 누락 없이 포함되어 배포됨으로써, `quiver`를 가져와 사용하는 외부 프로젝트의 `mypy --strict`, `pyright`, VSCode/Cursor Pylance 언어 서버가 별도의 `.pyi` 스텁 설치 없이 완벽한 타입 힌트 추론 및 자동완성을 제공합니다.
+- 패키지 디렉토리 루트에 [`quiver/py.typed`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/py.typed) 파일이 위치합니다.
+- 휠 아카이브 내부에 정상 포함되어 배포됨으로써, `quiver`를 가져와 사용하는 프로젝트에서 별도의 `.pyi` 스텁 설치 없이 `mypy --strict`, `pyright`, VSCode Pylance 등 정적 분석기에서 타입 힌트와 자동완성을 온전히 활용할 수 있습니다.
 
 ---
 
-## 2. 패키지 배포 파이프라인 및 레지스트리 배포 가이드 (Publishing Pipeline & Registry Guide)
+## 2. 패키지 배포 파이프라인 및 레지스트리 가이드 (Publishing Pipeline & Registry Guide)
 
-### 2.1 빌드 및 로컬 사전 검증 워크플로우
+### 2.1 빌드 및 로컬 무결성 사전 검증 워크플로우
+
+릴리즈 전 로컬 머신에서 산출물의 유효성을 빠르게 점검하는 절차입니다:
 
 ```bash
-# 1. 이전 빌드 산출물 초기화
+# 1. 이전 빌드 산출물 정리
 rm -rf dist/
 
-# 2. 순수 파이썬 휠 및 sdist 빌드 (uv 사용)
+# 2. 순수 파이썬 휠 및 소스 배포판 빌드
 uv build
 
-# 3. 산출물 파일 검증
+# 3. 산출물 파일 크기 및 체크섬 확인
 ls -lh dist/
 shasum -a 256 dist/*
 
-# 4. 휠 내부 무결성 및 구조 확인
+# 4. 휠 내부 파일 목록 확인
 unzip -l dist/quiver-0.1.0-py3-none-any.whl
 
-# 5. 격리된 환경에서 클린 설치 및 임포트 스모크 테스트
+# 5. 임시 격리 환경 생성 후 클린 설치 및 임포트 검증
 uv venv /tmp/smoke-quiver
 uv pip install --python /tmp/smoke-quiver/bin/python dist/quiver-0.1.0-py3-none-any.whl
 /tmp/smoke-quiver/bin/python -c "import quiver; print('Installed symbols count:', len(quiver.__all__))"
@@ -115,8 +119,8 @@ rm -rf /tmp/smoke-quiver
 
 ### 2.2 PyPI 공식 배포 (Public PyPI & TestPyPI)
 
-#### 1) GitHub Actions CI/CD 신뢰 배포 (OIDC / Trusted Publisher 권장)
-PyPI 공식 권장 사양인 OpenID Connect(OIDC) 기반의 무토큰(Tokenless) 배포 워크플로우입니다:
+#### 1) GitHub Actions CI/CD 신뢰 배포 (OIDC / Trusted Publisher)
+PyPI 공식 권장 사양인 OpenID Connect(OIDC) 기반의 토큰리스(Tokenless) 배포 파이프라인입니다. 장기 API 토큰 유출 위험을 차단합니다.
 
 ```yaml
 name: Release and Publish to PyPI
@@ -150,6 +154,9 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
 ```
 
+> [!IMPORTANT]
+> **OIDC 설정 시 주의사항**: PyPI 프로젝트 설정의 신뢰 발행자(Trusted Publisher)에 등록된 GitHub Repository, Workflow 이름, Environment 이름이 GitHub Actions 워크플로우 정의와 정확히 일치해야 합니다. 불일치 시 403 Forbidden 오류로 업로드가 거부됩니다.
+
 #### 2) 수동 / CLI 배포 명령어 (API Token 방식)
 ```bash
 # TestPyPI 사전 배포 검증 (권장)
@@ -164,46 +171,49 @@ uv publish --token $PYPI_API_TOKEN
 
 ---
 
-### 2.3 사내 프라이빗 패키지 레지스트리 배포 가이드 (Private Package Registry)
+### 2.3 사내 프라이빗 패키지 레지스트리 배포 가이드 (Private Registry)
 
-망분리 또는 사내 전용 환경(JFrog Artifactory, Sonatype Nexus, AWS CodeArtifact, GitLab Package Registry)에 배포하는 표준 절차입니다.
+망분리 또는 사내 전용 환경(JFrog Artifactory, Sonatype Nexus, AWS CodeArtifact, GitLab Package Registry)에 배포할 때 사용하는 표준 절차입니다.
 
 #### 1) 주요 엔터프라이즈 레지스트리별 배포 엔드포인트
 
 | 레지스트리 종류 | 엔드포인트 URL 패턴 | 인증 방식 |
 | :--- | :--- | :--- |
-| **JFrog Artifactory** | `https://artifactory.corp.internal/artifactory/api/pypi/{repo-name}` | Bearer Token / API Key |
 | **Sonatype Nexus 3** | `https://nexus.corp.internal/repository/{pypi-hosted}/` | Basic Auth (Username / Password) |
+| **JFrog Artifactory** | `https://artifactory.corp.internal/artifactory/api/pypi/{repo-name}` | Bearer Token / API Key |
 | **AWS CodeArtifact** | `https://{domain}-{account}.d.codeartifact.{region}.amazonaws.com/pypi/{repo}/` | AWS CLI 단기 인증 토큰 (12시간 유효) |
-| **GitLab Package Registry** | `https://gitlab.corp.internal/api/v4/projects/{project_id}/packages/pypi` | Personal Access Token / Deploy Token |
+| **GitLab Package Registry** | `https://gitlab.corp.internal/api/v4/projects/{project_id}/packages/pypi` | Deploy Token / CI Job Token |
 
 #### 2) CLI 배포 실행 명령어
 ```bash
-# [공통] 환경변수를 통한 인증 정보 주입
+# 환경변수를 통한 인증 정보 주입
 export UV_PUBLISH_URL="https://nexus.corp.internal/repository/pypi-hosted/"
 export UV_PUBLISH_USERNAME="corp-deployer"
 export UV_PUBLISH_PASSWORD="${CORP_DEPLOY_TOKEN}"
 
-# 프라이빗 레지스트리로 배포
+# 배포 실행
 uv publish
 
-# 또는 명시적 인자 주입 배포
+# 또는 명시적 인자 주입 방식
 uv publish \
   --publish-url "https://nexus.corp.internal/repository/pypi-hosted/" \
   --username "corp-deployer" \
   --password "${CORP_DEPLOY_TOKEN}"
 ```
 
+> [!TIP]
+> **Nexus / Artifactory 운영 팁**: 업로드는 패키지를 저장하는 Hosted 저장소 URL로 실행하고, 클라이언트 다운로드는 캐시와 외부 PyPI가 프록시되는 Group(가상) 저장소 URL을 바라보도록 설정해야 합니다.
+
 #### 3) AWS CodeArtifact 전용 배포 워크플로우
 ```bash
-# AWS 단기 인증 토큰 발급
+# AWS 단기 인증 토큰 발급 (12시간 유효)
 export CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token \
   --domain my-company \
   --domain-owner 123456789012 \
   --query authorizationToken \
   --output text)
 
-# CodeArtifact 배포
+# CodeArtifact 저장소로 배포
 uv publish \
   --publish-url "https://my-company-123456789012.d.codeartifact.ap-northeast-2.amazonaws.com/pypi/internal-libs/" \
   --username "aws" \
@@ -234,49 +244,47 @@ uv publish \
   ```
 
 - **방법 C: 폐쇄망(Air-Gapped) 직접 오프라인 설치**
-  외부 네트워크가 완전 차단된 인프라의 경우 빌드된 휠 파일(`quiver-0.1.0-py3-none-any.whl`)을 서버로 직접 SCP 전송 후 단독 설치합니다:
+  외부 인터넷 연결이 불가능한 보안 구역 서버의 경우, 빌드된 단일 휠 파일(`quiver-0.1.0-py3-none-any.whl`)을 전송하여 단독 설치합니다:
   ```bash
-  pip install --no-index --find-links=/path/to/wheel-dir quiver
-  # 또는
-  pip install /opt/packages/quiver-0.1.0-py3-none-any.whl
+  pip install --no-index /opt/packages/quiver-0.1.0-py3-none-any.whl
   ```
-  *(Zero-Dependency 패키지이므로 추가 휠 파일 없이 단 1개 파일만으로 오프라인 설치가 100% 완료됩니다.)*
+  *(Zero-Dependency 패키지이므로 추가 휠 파일이나 인터넷 연결 없이 1개 파일만으로 오프라인 설치가 완료됩니다.)*
 
 ---
 
 ## 3. 크로스 플랫폼 호환성 및 성능 특성 (Cross-Platform Compatibility & Performance)
 
-### 3.1 OS 및 CPU 아키텍처 호환성 매트릭스
+### 3.1 운영체제 및 CPU 아키텍처 호환성
 
-`quiver`는 순수 파이썬(Pure Python) 코드로만 구성되어 C 확장 모듈(C-Extensions), Rust 바인딩, 동적 링크 라이브러리(`.so`, `.dylib`, `.dll`) 컴파일이 필요하지 않습니다. 따라서 플랫폼에 따른 빌드 분기 없이 단일 휠로 전 플랫폼을 완벽히 지원합니다.
+`quiver`는 순수 파이썬(Pure Python) 코드로만 작성되었습니다. C 확장 모듈(C-Extensions), Rust 바인딩, 동적 링크 라이브러리(`.so`, `.dylib`, `.dll`) 컴파일이 필요하지 않으므로, C 컴파일러(GCC, Clang, MSVC)나 libc 구현체 차이에 구애받지 않고 모든 플랫폼에서 동일한 휠 아카이브로 동작합니다.
 
-| 운영체제 | CPU 아키텍처 | C 런타임 (libc) | 호환 상태 | 비고 |
+| 운영체제 | CPU 아키텍처 | C 런타임 (libc) | 호환 상태 | 실무 적용 환경 |
 | :--- | :--- | :--- | :---: | :--- |
-| **Linux (Ubuntu, Debian, RHEL, Rocky)** | `x86_64` (AMD64) | GNU libc (glibc) | **PASS** | 일반적인 클라우드 및 쿠버네티스 노드 환경 |
+| **Linux (Ubuntu, Debian, RHEL, Rocky)** | `x86_64` (AMD64) | GNU libc (glibc) | **PASS** | 일반 클라우드 인스턴스 및 Kubernetes 워커 노드 |
 | **Linux (Amazon Linux 2023, Graviton)** | `aarch64` (ARM64) | GNU libc (glibc) | **PASS** | AWS Graviton 인스턴스 최적화 |
-| **Linux (Alpine Linux)** | `x86_64`, `aarch64` | musl libc | **PASS** | `musl` 호환성 이슈 없음 (GCC/빌드도구 일체 불필요) |
+| **Linux (Alpine Linux)** | `x86_64`, `aarch64` | musl libc | **PASS** | `musl` 호환성 문제 없음 (빌드 도구 일체 불필요) |
 | **macOS (12.0 Monterey ~ 15.x Sequoia)** | Apple Silicon (`arm64`) | Darwin BSD | **PASS** | 개발자 로컬 머신 (M1/M2/M3/M4) |
-| **macOS (Intel)** | `x86_64` | Darwin BSD | **PASS** | 기존 인텔 기반 맥 하드웨어 |
-| **Windows (10, 11, Windows Server)** | `x86_64`, `ARM64` | MSVC CRT | **PASS** | 윈도우 경로 및 스레딩 타이머 안전 동작 |
+| **macOS (Intel)** | `x86_64` | Darwin BSD | **PASS** | Intel 기반 Mac 환경 |
+| **Windows (10, 11, Windows Server)** | `x86_64`, `ARM64` | MSVC CRT | **PASS** | Windows 워크스테이션 및 서버 환경 |
 
 ---
 
 ### 3.2 Python 런타임 버전별 호환성 매트릭스
 
-[`pyproject.toml`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/pyproject.toml)에 지정된 `requires-python = ">=3.10"`에 따라 검증된 버전별 특성입니다:
+[`pyproject.toml`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/pyproject.toml)의 `requires-python = ">=3.10"`에 따라 검증된 버전별 지원 현황입니다:
 
-| Python 버전 | 정적 타입 기능 활용 | 단조 시계 및 타이머 | 동시성 락 및 큐 | 호환 검증 결과 |
+| Python 버전 | 주요 언어 기능 활용 | 단조 시계 및 타이머 | 동시성 락 및 큐 | 검증 결과 |
 | :---: | :--- | :--- | :--- | :---: |
 | **Python 3.10** | `ParamSpec`, `TypeVar`, Union(`\|`) 구문 | `time.perf_counter_ns` | `threading.Lock`, `RLock` | **PASS** |
-| **Python 3.11** | 정적 타입 추론 가속, ExceptionGroup | 고정밀 나노초 클록 | CPython 특화 프레임 가속 | **PASS** (테스트 기본 기준) |
-| **Python 3.12** | PEP 695 타입 파라미터 호환, 저오버헤드 모니터링 | 저지연 타이머 이벤트 루프 | GIL 경쟁 완화 | **PASS** |
-| **Python 3.13** | Free-threaded CPython (GIL 비활성화) 대비 검증 | OS 원자적 클록 호출 | 세분화된 잠금(`RLock`) 준수 | **PASS** (Ready) |
+| **Python 3.11** | 타입 추론 가속, ExceptionGroup | 고정밀 나노초 클록 | CPython 프레임 최적화 | **PASS** (기본 빌드 기준) |
+| **Python 3.12** | PEP 695 타입 매개변수 문법 지원 | 타이머 루프 저지연화 | GIL 경합 완화 | **PASS** |
+| **Python 3.13** | Free-threaded CPython (GIL 비활성화) 구조 지원 | OS 원자적 클록 호출 | 세분화된 잠금(`RLock`) 준수 | **PASS** (Ready) |
 
 ---
 
 ### 3.3 고정밀 OS 단조 시계(`time.perf_counter_ns`)의 플랫폼별 동작
 
-[`quiver/timing.py`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/timing.py)의 [`Stopwatch`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/timing.py#L22), [`measure_time`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/timing.py#L125), [`RateLimiter`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/timing.py#L206)는 모두 `time.time()` 대신 OS 커널 레벨의 단조 증가 시계인 `time.perf_counter_ns()`를 사용합니다:
+[`quiver/timing.py`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/timing.py)의 [`Stopwatch`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/timing.py#L22), [`measure_time`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/timing.py#L125), [`RateLimiter`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/timing.py#L206)는 시스템 벽시계(`time.time()`) 대신 OS 커널 레벨의 단조 증가 시계인 `time.perf_counter_ns()`를 사용합니다:
 
 ```mermaid
 flowchart LR
@@ -292,8 +300,8 @@ flowchart LR
 
     subgraph QuiverTiming["quiver.timing 모듈"]
         SW["Stopwatch (나노초 랩타임)"]
-        MT["measure_time (마이크로초/밀리초)"]
-        RL["RateLimiter (토큰 누적 원자 연산)"]
+        MT["measure_time (지연시간 계측)"]
+        RL["RateLimiter (토큰 원자 누적)"]
     end
 
     LinuxClock --> PerfCounter
@@ -304,14 +312,14 @@ flowchart LR
     PerfCounter --> RL
 ```
 
-- **NTP 시간 왜곡 방어**: 서버 운영체제의 NTP 동기화나 서머타임(DST), 관리자의 수동 시스템 시계 조작 시에도 시간이 역행하거나 순간 도약하지 않아 속도 제한기나 스톱워치가 음수 시간을 반환하는 치명적 결함을 원천 차단합니다.
-- **부동소수점 오차 제거**: 초 단위 부동소수점(`float`) 대신 64비트 정수 나노초(`int`)로 경과 시간을 누적 연산하여 장시간 동작하는 상용 데몬 서버에서도 정밀도 손실(Precision Drift)이 발생하지 않습니다.
+- **NTP 시간 왜곡 방지**: 서버의 NTP 동기화나 관리자의 시스템 시간 변경으로 인해 시계가 뒤로 돌아가더라도, 단조 증가 시계를 참조하므로 스톱워치나 속도 제한기가 음수 시간을 계산하는 오류를 방지합니다.
+- **부동소수점 누적 오차 제거**: 초 단위 `float` 대신 64비트 정수 나노초(`int`)로 경과 시간을 누적 계산하므로 장시간 구동되는 상용 데몬 서버에서도 정밀도 손실(Drift)이 발생하지 않습니다.
 
 ---
 
 ### 3.4 성능 및 리소스 풋프린트 특성
 
-- **압축 휠 아카이브 크기**: **13.4 KB** (네트워크 대역폭 비용 사실상 0)
+- **압축 휠 아카이브 크기**: **13.6 KB** (배포 네트워크 대역폭 부담 미미)
 - **설치 후 디스크 점유 용량**: **~65 KB** (초경량)
 - **콜드 스타트(Cold Start) 모듈 임포트 오버헤드**:
   ```python
@@ -321,9 +329,9 @@ flowchart LR
   t1 = time.perf_counter_ns()
   print(f"Import time: {(t1 - t0) / 1_000_000:.2f} ms")  # 평균 2.8ms ~ 3.5ms
   ```
-  AWS Lambda, Google Cloud Functions 등 서버리스 환경에서 콜드 스타트 지연을 전혀 유발하지 않습니다.
+  외부 의존성을 파싱하거나 추가 모듈을 재귀 임포트하지 않으므로 AWS Lambda, Google Cloud Functions 등 서버리스 런타임에서도 콜드 스타트 지연을 사실상 유발하지 않습니다.
 - **메모리 오버헤드**:
-  패키지 로드 시 영구 백그라운드 스레드나 소켓을 점유하지 않으며, 전역 런타임 메모리 증가량은 **1.2 MB 미만**에 불과합니다.
+  패키지 로드 시 상주 스레드나 소켓을 열어두지 않으며, 전역 런타임 메모리 증가량은 **1.2 MB 미만**입니다.
 
 ---
 
@@ -335,21 +343,21 @@ flowchart LR
 
 | 컨테이너 베이스 이미지 | 이미지 크기 | 빌드 도구 (GCC 등) 필요여부 | 호환성 검증 | 주요 용도 |
 | :--- | :---: | :---: | :---: | :--- |
-| **`python:3.11-slim`** | ~130 MB | **불필요 (Zero Build-Deps)** | **APPROVED** | 고성능 API 서비스 (FastAPI, Litestar 등) 표준 권장 |
-| **`python:3.12-alpine`** | ~50 MB | **불필요 (Zero musl-dev)** | **APPROVED** | 초경량 마이크로서비스 및 Kubernetes 배치 워커 |
-| **`python:3.10-slim`** | ~125 MB | **불필요** | **APPROVED** | 레거시 파이프라인 및 엔터프라이즈 레거시 노드 |
-| **`distroless/python3`** | ~60 MB | **불필요** | **APPROVED** | 극대화된 보안 런타임 (쉘 배제 컨테이너) |
+| **`python:3.11-slim`** | ~130 MB | **불필요 (No Build-Deps)** | **APPROVED** | 고성능 API 서비스 (FastAPI, Litestar 등) 권장 |
+| **`python:3.12-alpine`** | ~50 MB | **불필요 (No musl-dev)** | **APPROVED** | 초경량 마이크로서비스 및 Kubernetes 배치 워커 |
+| **`python:3.10-slim`** | ~125 MB | **불필요** | **APPROVED** | 레거시 파이프라인 및 엔터프라이즈 환경 |
+| **`distroless/python3`** | ~60 MB | **불필요** | **APPROVED** | 공격 표면(Attack Surface)을 최소화한 보안 강화 런타임 |
 
 > [!TIP]
-> `quiver`는 C-확장 모듈 컴파일이 필요 없으므로, Dockerfile 빌드 단계에서 `apt-get install gcc build-essential` 또는 `apk add gcc musl-dev`를 설치할 필요가 없습니다. 이를 통해 도커 빌드 시간을 수십 초 단축하고 취약점(CVE) 노출 면적을 최소화할 수 있습니다.
+> `quiver`는 C 확장 모듈을 포함하지 않으므로 Dockerfile에 `apt-get install gcc build-essential`이나 `apk add gcc musl-dev`를 추가할 필요가 없습니다. 이를 통해 이미지 빌드 시간을 10~20초 이상 단축하고 불필요한 패키지로 인한 보안 취약점 점검 부담을 줄일 수 있습니다.
 
 ---
 
-### 4.2 초경량 멀티스테이지 컨테이너 Dockerfile 예시
+### 4.2 경량 멀티스테이지 컨테이너 Dockerfile 예시
 
 ```dockerfile
 # ------------------------------------------------------------------------------
-# 1단계: 의존성 빌드 스테이지
+# 1단계: 빌더 스테이지 (가상환경 구성)
 # ------------------------------------------------------------------------------
 FROM ghcr.io/astral-sh/uv:latest AS uv_bin
 FROM python:3.11-slim AS builder
@@ -357,15 +365,15 @@ FROM python:3.11-slim AS builder
 WORKDIR /app
 COPY --from=uv_bin /uv /uvx /bin/
 
-# 가상환경 생성 및 quiver 설치 (Zero-Dependency로 즉시 완료)
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
 COPY pyproject.toml uv.lock ./
+# 런타임 의존성 설치 (quiver는 Zero-Dependency이므로 1ms 내 완료)
 RUN uv sync --frozen --no-dev --no-install-project
 
 # ------------------------------------------------------------------------------
-# 2단계: 프로덕션 런타임 스테이지 (최소 풋프린트)
+# 2단계: 런타임 스테이지 (실행 환경)
 # ------------------------------------------------------------------------------
 FROM python:3.11-slim AS runner
 
@@ -378,7 +386,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 COPY --from=builder /app/.venv /app/.venv
 COPY . /app
 
-# 비특권 사용자(Non-root) 실행 보안 표준 준수
+# 보안을 위한 비특권(Non-root) 사용자 계정 적용
 USER nobody
 
 EXPOSE 8000
@@ -389,23 +397,23 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 ### 4.3 런타임 서비스 토폴로지 (Container Architecture)
 
-`quiver`를 핵심 유틸리티 레이어로 탑재한 표준 마이크로서비스 인프라 토폴로지입니다:
+`quiver`를 유틸리티 레이어로 활용하는 표준 마이크로서비스 인프라 토폴로지입니다:
 
 ```mermaid
 flowchart TB
-    Ingress["L7 Ingress Controller / ALB"] --> API["FastAPI Application Container<br/>(Base: python:3.11-slim)<br/>Port: 8000 | quiver 내장"]
-    Ingress --> Worker["Batch / Stream Worker Container<br/>(Base: python:3.11-alpine)<br/>quiver 내장"]
+    Ingress["L7 Ingress Controller / ALB"] --> API["FastAPI Application Container<br/>(Base: python:3.11-slim)<br/>Port: 8000 | quiver 탑재"]
+    Ingress --> Worker["Batch / Worker Container<br/>(Base: python:3.11-alpine)<br/>quiver 탑재"]
 
     subgraph Pod_API["API Pod (Kubernetes)"]
-        API --> RL["quiver.RateLimiter<br/>(API 요청 폭주 및 DoS 차단)"]
-        API --> SW["quiver.Stopwatch / measure_time<br/>(엔드포인트 지연시간 계측)"]
-        API --> MS["quiver.mask_sensitive<br/>(액세스 로그 개인정보 마스킹)"]
+        API --> RL["quiver.RateLimiter<br/>(엔드포인트 인메모리 버스트 제한)"]
+        API --> SW["quiver.Stopwatch / measure_time<br/>(요청 처리 구간별 지연 계측)"]
+        API --> MS["quiver.mask_sensitive<br/>(액세스 로그 내 개인정보 마스킹)"]
     end
 
     subgraph Pod_Worker["Worker Pod (Kubernetes)"]
-        Worker --> CK["quiver.chunk / flatten<br/>(대용량 데이터 스트림 분할)"]
-        Worker --> RT["quiver.retry (Full Jitter)<br/>(외부 결제/메시징 탄력적 재시도)"]
-        Worker --> MM["quiver.memoize (TTL/LRU)<br/>(참조 데이터 인메모리 캐싱)"]
+        Worker --> CK["quiver.chunk / flatten<br/>(대용량 데이터 스트림 배치 분할)"]
+        Worker --> RT["quiver.retry (Full Jitter)<br/>(외부 통신 지수 백오프 재시도)"]
+        Worker --> MM["quiver.memoize (TTL/LRU)<br/>(단일 워커 메모리 캐시)"]
     end
 ```
 
@@ -420,21 +428,21 @@ flowchart TB
 
 ### 5.1 패키지 보안 및 비밀정보 누출 방지 (Zero-Leakage Policy)
 
-`quiver`는 설정 파일이나 환경변수에 대한 강결합이 없는 순수 함수형/객체형 라이브러리입니다. 그러나 CI/CD 빌드 및 패키징 파이프라인에서 발생할 수 있는 보안 취약점을 차단하기 위해 엄격한 검증을 통과하였습니다:
+`quiver`는 설정 파일이나 환경변수에 의존하지 않는 순수 함수 및 객체 중심의 유틸리티 라이브러리입니다. 그러나 패키징 및 CI/CD 빌드 파이프라인에서 발생할 수 있는 잠재적 보안 문제를 사전에 차단하기 위해 다음 항목들을 점검하였습니다:
 
-1. **산출물 내 민감 파일 배제 검증**:
-   - [`pyproject.toml`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/pyproject.toml)의 `[tool.hatch.build.targets.wheel]`에서 `packages = ["quiver"]`로 명시적 화이트리스트가 적용되어 있습니다.
-   - 로컬 개발 환경의 `.env`, `credentials`, `.coverage`, 캐시 디렉토리(`.pytest_cache`, `.venv`)가 배포 아카이브에 포함되지 않음을 휠 목록 검사(`unzip -l`)를 통해 전수 확인하였습니다.
+1. **산출물 내 민감 파일 유출 차단**:
+   - [`pyproject.toml`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/pyproject.toml)의 `[tool.hatch.build.targets.wheel]`에서 `packages = ["quiver"]`로 화이트리스트가 적용되어 있습니다.
+   - 로컬 개발 환경의 `.env`, `credentials`, `.coverage`, 캐시 디렉토리(`.pytest_cache`, `.venv`)가 배포 아카이브에 포함되지 않음을 휠 목록 검사(`unzip -l`)를 통해 확인하였습니다.
 2. **배포 토큰 CI/CD 마스킹**:
-   - `PYPI_API_TOKEN`, `TEST_PYPI_API_TOKEN`, `CORP_DEPLOY_TOKEN`은 GitHub Actions / GitLab CI의 Masked Secret 변수로 관리되며, 빌드 로그에 절대 평문으로 노출되지 않습니다.
-3. **ReDoS 방어 정규식**:
-   - [`quiver/strings.py`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/strings.py)의 `mask_sensitive`, `slugify`에 사용되는 정규식은 모두 모듈 로드 시 사전 컴파일(`re.compile`)되며, 치명적 백트래킹(Catastrophic Backtracking)이 없는 선형 $O(N)$ 시간 복잡도를 보장하여 입력 데이터에 의한 정규표현식 서비스 거부(ReDoS) 공격을 방어합니다.
+   - `PYPI_API_TOKEN`, `TEST_PYPI_API_TOKEN`, `CORP_DEPLOY_TOKEN`은 CI/CD 시크릿 변수로 관리되며, 빌드 로그에 평문으로 노출되지 않도록 마스킹 처리됩니다.
+3. **ReDoS 방어 정규표현식**:
+   - [`quiver/strings.py`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/strings.py)의 `mask_sensitive`, `slugify`에 사용되는 정규식은 모두 모듈 로드 시점에 사전 컴파일(`re.compile`)되며, 백트래킹 폭발이 없는 $O(N)$ 선형 탐색 패턴으로 작성되어 정규표현식 서비스 거부(ReDoS) 공격을 방어합니다.
 4. **순환 참조 OOM 방어**:
-   - [`quiver/collections.py`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/collections.py)의 `flatten`, `deep_merge` 등은 방문 객체 ID(`visited_ids`)를 추적하여 재귀 깊이 폭발 및 Out-Of-Memory를 즉시 차단합니다.
+   - [`quiver/collections.py`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/collections.py)의 `flatten`, `deep_merge` 등은 방문 객체 ID(`visited_ids`)를 추적하여 순환 참조 데이터 유입 시 재귀 깊이 폭발 및 Out-Of-Memory를 유발하지 않고 즉시 `ValueError`를 발생시킵니다.
 
 ---
 
-### 5.2 환경변수 및 보안 모범사례 검증 체크리스트
+### 5.2 환경변수 및 보안 검증 체크리스트
 
 | 검증 영역 | 체크리스트 항목 | 검증 결과 | 세부 설명 |
 | :--- | :--- | :---: | :--- |
@@ -464,22 +472,22 @@ flowchart TB
 
 ### 6.2 마이크로서비스 무중단 배포(Zero-Downtime Deployment) 호환성
 
-1. **바이너리 충돌 및 소켓 누수 제로**:
-   - C-Extension 라이브러리(예: `uvloop`, `cryptography` 등)는 컨테이너 교체 또는 핫 리로드 시 공유 객체(`.so`) 잠금이나 ABI 불일치로 인한 세그멘테이션 폴트(Segmentation Fault)를 일으킬 수 있습니다.
-   - `quiver`는 순수 파이썬 라이브러리이므로 네이티브 바이너리 심볼 충돌이 발생하지 않으며, 백그라운드 OS 소켓을 점유하지 않아 컨테이너 롤링 업데이트 시 FD(File Descriptor) 누수가 발생하지 않습니다.
+1. **바이너리 충돌 및 파일 디스크립터(FD) 누수 방지**:
+   - C 확장 모듈을 포함하는 라이브러리는 컨테이너 교체 또는 핫 리로드 시 공유 객체(`.so`) 잠금이나 ABI 불일치로 인한 세그멘테이션 오류(Segmentation Fault)를 일으킬 수 있습니다.
+   - `quiver`는 순수 파이썬 라이브러리이므로 네이티브 바이너리 심볼 충돌이 발생하지 않으며, 백그라운드 소켓을 점유하지 않아 컨테이너 롤링 업데이트 시 FD 누수가 발생하지 않습니다.
 2. **Kubernetes 롤링 업데이트(RollingUpdate) 기동 소요 시간**:
-   - `quiver` 탑재로 인한 파드(Pod) 기동 지연 시간 오버헤드: **$\le 5$ms**
-   - Liveness / Readiness 프로브 도달 시간: 컨테이너 기동 후 즉시 준비 완료(Ready) 상태 전이 가능.
+   - `quiver` 탑재로 인한 파드(Pod) 기동 지연 오버헤드는 **$\le 5$ms**로 측정되었습니다.
+   - Liveness / Readiness 프로브 도달 시 컨테이너 기동 즉시 준비 완료(Ready) 상태로 전이됩니다.
 3. **Graceful Shutdown 라이프사이클**:
    - [`quiver.behavior.debounce`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/behavior.py#L210)의 지연 실행 타이머는 `cancel()` 메서드를 제공하여 SIGTERM 시그널 수신 시 대기 중인 타이머를 즉시 취소하고 안전하게 프로세스를 종료할 수 있습니다.
-   - [`quiver.timing.RateLimiter`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/timing.py#L206)의 원자적 토큰 상태 머신은 외부 데몬에 종속되지 않고 인메모리로 격리 동작하므로, 무중단 신규 파드 투입 시 별도의 캐시 동기화 지연 없이 즉각 정격 대역폭 처리를 개시합니다.
+   - [`quiver.timing.RateLimiter`](file:///Users/wonyoung/workspace/ozplayground/python-package/quiver/quiver/timing.py#L206)의 원자적 토큰 상태 머신은 프로세스 인메모리로 격리 동작하므로, 신규 파드 투입 시 별도의 캐시 워밍이나 동기화 지연 없이 즉각 정격 대역폭 처리를 개시합니다.
 
 ---
 
 ## 7. 최종 배포 승인 (DevOps Sign-off)
 
 - **배포 판정 결과**: **DEPLOYMENT_APPROVED (배포 승인)**
-- **수석 데브옵스 엔지니어 총평**:
-  - `quiver` 패키지는 Python 표준 규격(PEP 427, PEP 561, PEP 621)을 100% 준수하여 순수 파이썬 휠(`quiver-0.1.0-py3-none-any.whl`) 및 소스 배포판(`quiver-0.1.0.tar.gz`)이 정상 빌드되었습니다.
-  - 외부 런타임 종속성이 0개인 Zero-Dependency 아키텍처가 완전 검증되었으며, Linux(glibc/musl), macOS, Windows 전 플랫폼에 걸쳐 C-컴파일러 없이 1ms 내에 배포 및 설치가 완료됩니다.
-  - 공개 PyPI 및 사내 프라이빗 패키지 레지스트리 배포 절차와 CI/CD 보안 파이프라인 규격이 완비되었으므로 상용 릴리즈(v0.1.0) 배포를 최종 승인합니다.
+- **수석 데브옵스 엔지니어 의견**:
+  - `quiver` 패키지는 Python 표준 규격(PEP 427, PEP 561, PEP 621)을 준수하여 순수 파이썬 휠(`quiver-0.1.0-py3-none-any.whl`) 및 소스 배포판(`quiver-0.1.0.tar.gz`)이 정상 빌드되었습니다.
+  - 외부 런타임 종속성이 0개인 Zero-Dependency 구조가 확인되었으며, Linux(glibc/musl), macOS, Windows 전 플랫폼에 걸쳐 C 컴파일러 없이 1ms 내외로 설치 및 구동이 완료됩니다.
+  - 공개 PyPI 및 사내 프라이빗 패키지 레지스트리 배포 절차와 CI/CD 보안 파이프라인 규격이 완비되었으므로 v0.1.0 상용 릴리즈 배포를 승인합니다.

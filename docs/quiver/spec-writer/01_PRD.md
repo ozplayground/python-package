@@ -2,109 +2,102 @@
 
 - **작성일자**: 2026-09-23
 - **작성자**: 기획 명세 작성가 (`spec-writer`)
-- **문서 버전**: v1.0
+- **문서 버전**: v1.1
 - **상태**: Approved
 
 ---
 
-## 1. 프로덕트 비전 및 문제 정의 (Problem Statement & Vision)
+## 1. 배경 및 해결하려는 문제 (Problem Statement & Vision)
 
-- **배경 (Background)**:
-  - 현대 파이썬 백엔드 서비스, 데이터 엔지니어링 파이프라인, 그리고 마이크로서비스(MSA) 아키텍처 환경에서 개발자들은 매일 리스트 청킹, 중첩 딕셔너리 안전 추출, 함수 합성, 재시도(Retry), 디바운스, 민감정보 마스킹, 실행 시간 측정과 같은 공통 유틸리티를 반복적으로 구현하고 있습니다.
-  - 많은 프로젝트가 이러한 요구를 충족하기 위해 무거운 서드파티 라이브러리(예: `toolz`, `pydash`, `more-itertools`, `tenacity` 등)를 여러 개 도입하거나, 프로젝트 내부 사설 유틸(`utils.py`)에 정제되지 않은 스니펫을 무분별하게 복사-붙여넣기하여 유지보수 부채를 누적시키고 있습니다.
-  - 특히 외부 종속성이 많아질수록 패키지 설치 용량 증가, 의존성 충돌(Dependency Hell), 보안 취약점 전파(CVE) 위험이 급증하며, 사설 스니펫들은 타입 힌팅 부재, 원본 데이터 가변성(Mutation) 부작용, 스레드 안전성 결여 등으로 인해 런타임 버그의 주요 원인이 되고 있습니다.
+### 1.1 배경 (Background)
+파이썬 백엔드(FastAPI, Django) 및 데이터 처리 파이프라인을 구축하다 보면 리스트 청크 분할, 중첩 딕셔너리 안전 탐색, 지수 백오프 재시도, 실행 시간 측정, 개인정보 마스킹 같은 공통 작업이 끊임없이 반복됩니다.
 
-- **문제 정의 (Problem Statement)**:
-  1. **의존성 비대화 및 보안/공급망 리스크 (Dependency Bloat & Supply-Chain Risk)**:
-     - 단순한 유틸리티 함수 몇 개를 쓰기 위해 수십 개의 전이적 종속성(Transitive Dependencies)을 가진 서드파티 패키지를 설치함으로써 Docker 빌드 시간 지연 및 취약점 감사(Audit) 복잡도가 증가함.
-  2. **동적 타이핑 부작용과 빈약한 정적 분석 (Lack of Modern Type Hinting)**:
-     - 기존의 구형 유틸리티 라이브러리들은 파이썬 3.10+의 최신 타입 시스템(PEP 484, PEP 585, PEP 612 `ParamSpec`, PEP 675 `TypeVarTuple`, Generics)을 완전히 지원하지 못해 IDE 자동완성이 깨지고 `mypy --strict` 환경에서 수많은 타입 무시(`type: ignore`) 주석을 강제함.
-  3. **가변성(Mutation)으로 인한 부작용과 비표준 인터페이스**:
-     - 컬렉션 처리 시 입력 리스트나 딕셔너리의 원본을 직접 수정(In-place mutation)하여 예측 불가능한 동시성 버그를 유발함.
-     - 함수 제어, 스코프 체이닝, 시간 측정 도구들의 인터페이스가 제각각이어서 일관된 함수형 파이프라인 구성이 어려움.
+현업 팀들은 보통 두 가지 방식으로 이 문제를 해결해 왔습니다:
+1. **서드파티 패키지 복수 도입**: `toolz`, `pydash`, `more-itertools`, `tenacity` 등을 기능별로 따로 설치합니다.
+2. **사내 유틸 파일(`utils.py`) 복사-붙여넣기**: 이전 프로젝트에서 쓰던 10~20줄짜리 스니펫을 새 프로젝트로 옮겨 적습니다.
 
-- **프로덕트 비전 (Vision)**:
-  - **"The Modern, Zero-Dependency, Fully Type-Safe Utility Quiver for Python Engineers"**
-  - 파이썬 개발자를 위한 모던, **제로 의존성(Zero-Dependency)**, 완벽한 타입 힌팅 기반의 모던 전천후 유틸리티 툴킷(Quiver).
-  - 외부 서드파티 패키지 의존성을 완전히 배제($0$ External Dependencies)하고 순수 Python 3.10+ 표준 라이브러리만을 활용하여, 컬렉션 연산(`collections`), 고차 함수 제어(`behavior`), 문자열 변환 및 보안(`strings`), 스코프 확장(`scope`), 고정밀 타이밍(`timing`)을 아우르는 최적의 엔지니어링 도구를 원스톱으로 제공합니다.
+두 방식 모두 프로젝트가 커지면서 유지보수 문제를 일으킵니다.
+
+### 1.2 문제 정의 (Problem Statement)
+1. **외부 의존성 파편화와 공급망 관리 부담**:
+   - 단순 유틸리티 몇 개를 쓰자고 무거운 서드파티 패키지를 여러 개 추가하면, 패키지 간 의존성 충돌(`pip dependency conflict`)이 발생하기 쉽고 Docker 이미지 빌드 시간과 패키지 취약점(CVE) 감사 대상이 늘어납니다.
+2. **최신 타입 힌팅 미흡으로 인한 생산성 저하**:
+   - 구형 유틸리티 라이브러리들은 Python 3.10+의 최신 타입 시스템(PEP 612 `ParamSpec`, PEP 585 제네릭스)을 제대로 지원하지 못해 대부분 `Any`를 반환합니다. 이로 인해 IDE 자동완성이 작동하지 않고, `mypy --strict` 환경에서 코드베이스 전반에 `# type: ignore` 주석이 늘어납니다.
+3. **가변 객체 변이(Mutation)와 동시성 결함**:
+   - `utils.py`에 흔히 구현된 딕셔너리 병합이나 리스트 조작 코드는 입력 원본을 직접 수정(`dict.update`, `list.sort`)하여 예기치 않은 사이드 이펙트를 유발합니다. 또한 타이머나 캐시 로직에 적절한 스레드 락이 없어 멀티스레드 환경에서 데이터 오염이나 데드락이 발생합니다.
+
+### 1.3 프로덕트 비전 (Vision)
+- **"Zero-Dependency, Type-Safe Core Utility Library for Python 3.10+"**
+- `quiver`는 외부 의존성을 전혀 두지 않고($0$ External Dependencies) 파이썬 표준 라이브러리만으로 동작하는 경량 유틸리티 툴킷입니다.
+- 컬렉션 조작(`collections`), 고차 함수 제어(`behavior`), 문자열 변환 및 보안(`strings`), 스코프 확장(`scope`), 고정밀 계측(`timing`)의 5개 영역을 다루며, 모든 함수는 원본 불변성(Immutability)과 엄격한 정적 타입 힌팅을 기본 원칙으로 삼습니다.
 
 ---
 
-## 2. 타깃 페르소나 및 유저 저니 맵 (Personas & User Journey)
+## 2. 타깃 페르소나 및 유저 저니 (Personas & User Journey)
 
 ### 2.1 대표 페르소나
 
-- **페르소나 1: 정백엔드 (29세, 백엔드/API 엔지니어)**
-  - **주요 목표**: FastAPI/Django 서비스에서 외부 라이브러리 설치 부담 없이 안전하게 컬렉션 데이터 가공, 민감정보 마스킹, API 지수 백오프 재시도를 구현.
-  - **핵심 페인포인트**: 매번 다른 프로젝트에서 `utils.py`를 복사해 오다 보니 함수 시그니처가 다르고, `mypy` 엄격 모드에서 타입 에러가 쏟아지며, 재시도/디바운스 코드 구현 시 스레드 락 실수가 발생함.
+- **정백엔드 (29세, 백엔드 API 엔지니어)**
+  - **상황**: FastAPI 기반 마이크로서비스를 개발하며 대용량 주문 배치 처리, PG사 재시도 로직, 개인정보 마스킹 로깅을 구현 중.
+  - **목표**: 추가 라이브러리 설치 결재나 버전 충돌 걱정 없이 한 줄 임포트로 신뢰할 수 있는 헬퍼 함수를 사용하고, IDE에서 반환 타입 추론 지원을 온전히 받고자 함.
 
-- **페르소나 2: 박플랫폼 (35세, 플랫폼/SDK 아키텍트)**
-  - **주요 목표**: 사내 공통 사내 SDK 및 데이터 파이프라인 프레임워크 개발 시 외부 의존성이 전혀 없는 경량 코어 유틸 패키지를 채택하여 고객사/사내 환경의 의존성 충돌을 원천 차단.
-  - **핵심 페인포인트**: 사내 라이브러리에 서드파티 의존성을 넣었다가 사용자 프로젝트의 구형 의존성과 버전 충돌(`pip install` 충돌)이 빈번하게 발생하여 지원 티켓이 급증함.
+- **박플랫폼 (35세, 사내 공통 프레임워크/SDK 테크리드)**
+  - **상황**: 사내 20여 개 서비스 팀이 공통으로 사용하는 플랫폼 베이스 라이브러리를 배포 및 관리 중.
+  - **목표**: 의존성 트리를 최소화하여 각 팀 프로젝트의 기존 라이브러리 버전과 충돌하지 않는 견고한 코어 툴킷을 원함.
 
-### 2.2 핵심 유저 저니 (User Journey Map)
+### 2.2 핵심 유저 저니 맵 (User Journey Map)
 
 ```mermaid
 journey
-    title 개발자 핵심 여정 (패키지 설치부터 타입 세이프 유틸리티 합성까지)
-    section 설치 및 셋업
-      pip install quiver 설치 (0개 종속성 즉시 완료): 5: 정백엔드, 박플랫폼
-      py.typed 지원으로 IDE 완벽 자동완성 확인: 5: 정백엔드
-    section 데이터 파이프라인 가공
-      quiver.collections chunk 및 flatten 호출: 5: 정백엔드
-      deep_get 및 deep_set 불변 딕셔너리 안전 조작: 5: 정백엔드
-      strings.mask_sensitive 민감정보 마스킹: 4: 정백엔드
-    section 동작 제어 및 함수 합성
-      behavior.pipe 및 compose로 단방향 파이프라인 구성: 5: 정백엔드
-      retry 데코레이터로 불안정한 외부 호출 보호: 5: 박플랫폼
-      RateLimiter 및 measure_time으로 성능/트래픽 제어: 5: 박플랫폼
-    section 배포 및 무장애 검증
-      mypy --strict 100% 통과: 5: 박플랫폼
-      불변성 보장으로 멀티스레드 동시성 결함 제로 달성: 5: 박플랫폼
+    title quiver 도입 및 활용 여정
+    section 패키지 설치
+      pip install quiver (단일 경량 패키지, 즉시 설치 완료): 5: 정백엔드, 박플랫폼
+      py.typed 지원 확인 및 mypy strict 통과: 5: 정백엔드
+    section 데이터 변환 및 가공
+      collections.chunk로 배치 분할 처리: 5: 정백엔드
+      deep_get 및 deep_set으로 원본 손상 없이 딕셔너리 수정: 5: 정백엔드
+      strings.mask_sensitive로 로그 내 주민번호/카드번호 마스킹: 4: 정백엔드
+    section 안정성 확보 및 제어
+      behavior.retry로 네트워크 간헐적 장애 방어: 5: 박플랫폼
+      timing.RateLimiter로 외부 API 호출 속도 제어: 5: 박플랫폼
+      Stopwatch 및 measure_time으로 지연시간 로깅: 5: 정백엔드
 ```
 
 ---
 
-## 3. 기능 요구사항 및 MoSCoW 우선순위 매트릭스 (Feature Requirements)
+## 3. 기능 요구사항 및 MoSCoW 매트릭스 (Feature Requirements)
 
-| 요구사항 ID | 도메인 | 요구사항 명칭 및 상세 설명 | 우선순위 (MoSCoW) | 대응 비즈니스 가치 |
+| 요구사항 ID | 모듈 도메인 | 요구사항 명칭 및 상세 설명 | 우선순위 (MoSCoW) | 설계 의도 및 가치 |
 | :--- | :--- | :--- | :---: | :--- |
-| `REQ-COLL-001` | 컬렉션 (`collections`) | **고급 다형 컬렉션 조작 유틸리티군**<br/>`chunk`, `flatten`, `group_by`, `partition`, `uniq_by`, `windowed`, `deep_get`, `deep_set`, `merge`, `pick`, `omit` 등 불변성 기반의 고성능 컬렉션 처리 도구 제공 | **Must Have** | 컬렉션 조작 반복 코드 80% 제거 및 원본 데이터 보존 |
-| `REQ-BEHV-001` | 함수 동작 (`behavior`) | **함수 합성 및 실행 제어 데코레이터**<br/>`pipe`, `compose`, `curry`, `once`, `debounce`, `throttle`, TTL 기반 `memoize`, 지수 백오프/지터 기반 `retry` 제공 | **Must Have** | 안정적인 함수형 프로그래밍 및 일시적 장애 극복 |
-| `REQ-STR-001` | 문자열 (`strings`) | **케이스 변환 및 보안 문자열 트랜스포머**<br/>다양한 케이스 변환(camel, snake, kebab, pascal, title), URL 슬러그화(`slugify`), 단어 단위 잘라내기(`truncate`), 민감정보 정규식 마스킹(`mask_sensitive`) 제공 | **Must Have** | 문자열 포맷팅 일관성 및 개인정보 보호 규제 준수 |
-| `REQ-SCP-001` | 스코프 (`scope`) | **Kotlin 스타일 스코프 확장 및 널 안전 연산자**<br/>객체 컨텍스트 변환 `let`, 사이드이펙트 로깅 `also`/`tap`, 조건부 필터 `take_if`/`take_unless`, 널 병합 `coalesce` 제공 | **Must Have** | 가독성 높은 선언적 체이닝 및 임시 변수 오염 방지 |
-| `REQ-TIME-001` | 시간/타이밍 (`timing`) | **고정밀 벤치마킹 및 토큰 버킷 호출율 제한**<br/>나노초/밀리초 단위 정밀 측정 `Stopwatch`, 컨텍스트 매니저 겸용 `measure_time`, 스레드 안전한 토큰 버킷 `RateLimiter` 제공 | **Must Have** | 트래픽 폭주 방어 및 성능 프로파일링 정밀화 |
-| `REQ-TYP-001` | 타입 무결성 (`typing`) | **PEP 561 마커 및 Strict Type Hinting**<br/>패키지 내 `py.typed` 마커 탑재 및 `ParamSpec`, `TypeVar`, `Concatenate`를 활용한 100% 엄격 타입 정적 분석 보장 | **Should Have** | 개발자 경험(DX) 극대화 및 컴파일 타임 에러 검출 |
-| `REQ-ASYNC-001` | 비동기 호환 (`async`) | **비동기 코루틴 지원 래퍼**<br/>`retry`, `debounce`, `throttle`, `measure_time` 등 주요 제어 도구의 `async def` 코루틴 함수 지원 | **Should Have** | FastAPI 등 최신 비동기 파이썬 프레임워크와의 완벽 호환 |
-| `REQ-EXT-001` | 네이티브 확장 (`native`) | **C-Extension / Rust PyO3 가속 엔진**<br/>대용량 컬렉션 처리를 위한 C/Rust FFI 가속 바인딩 모듈 | **Won't Have (v1)**<br/>(순수 Python 제로 의존성 원칙 유지를 위해 v1 배제, 차기 버전 고려) | 순수 Python 이식성 유지 및 배포 복잡도 최소화 |
+| `REQ-COLL-001` | 컬렉션 (`collections`) | **불변 컬렉션 조작 유틸리티**<br/>`chunk`, `flatten`, `group_by`, `partition`, `uniq_by`, `windowed`, `deep_get`, `deep_set`, `merge`, `pick`, `omit`. 원본 데이터를 변이하지 않고 신규 컬렉션을 생성하거나 제너레이터 스트림으로 반환 | **Must Have** | 원본 데이터 훼손 버그 차단 및 배치 데이터 처리 간소화 |
+| `REQ-BEHV-001` | 함수 제어 (`behavior`) | **실행 제어 및 합성 데코레이터**<br/>`pipe`, `compose`, `curry`, `once`, `debounce`, `throttle`, TTL 기반 `memoize`, 지수 백오프/지터 기반 `retry`. 스레드 안전성 보장 | **Must Have** | 일시적 네트워크 장애 복구 및 빈번한 호출 제어 |
+| `REQ-STR-001` | 문자열 (`strings`) | **케이스 변환 및 마스킹 트랜스포머**<br/>케이스 변환(camel, snake, kebab, pascal, title), URL 정규화 `slugify`, 단어 경계 보존 `truncate`, 주민번호/이메일/전화번호/카드번호 `mask_sensitive` | **Must Have** | 개인정보 로깅 유출 방지 및 문자열 규격 통일 |
+| `REQ-SCP-001` | 스코프 (`scope`) | **스코프 체이닝 및 None 방어 함수**<br/>컨텍스트 변환 `let`, 부수효과 수행 후 원본 반환 `also`/`tap`, 조건부 필터 `take_if`/`take_unless`, 널 병합 `coalesce` | **Must Have** | 임시 변수 남발 방지 및 선언적 체이닝 가독성 확보 |
+| `REQ-TIME-001` | 타이밍 (`timing`) | **고정밀 계측기 및 호출율 제한기**<br/>나노초 정밀도 랩 타임 `Stopwatch`, 데코레이터/컨텍스트 매니저 겸용 `measure_time`, 토큰 버킷 기반 스레드 안전 `RateLimiter` | **Must Have** | API 쿼터 초과 방지 및 병목 지점 정밀 프로파일링 |
+| `REQ-TYP-001` | 타입 지원 (`typing`) | **PEP 561 마커 및 Strict Type Hinting**<br/>패키지 루트에 `py.typed` 번들링, `ParamSpec`과 `TypeVar` 기반으로 래핑 대상 함수의 시그니처와 반환 타입을 온전히 보존 | **Should Have** | IDE 자동완성 복원 및 타입 체커 오류 제거 |
+| `REQ-ASYNC-001` | 비동기 호환 (`async`) | **비동기 코루틴 지원 데코레이터**<br/>`retry`, `debounce`, `throttle`, `measure_time`에 대한 `async def` 코루틴 래퍼 호환 지원 | **Should Have** | 비동기 웹 프레임워크(FastAPI 등)와의 매끄러운 연동 |
+| `REQ-EXT-001` | 네이티브 가속 (`native`) | **C/Rust 컴파일드 가속 엔진**<br/>대용량 컬렉션 순회 성능을 높이기 위한 C-Extension 또는 Rust 바인딩 | **Won't Have (v1)**<br/>(바이너리 휠 빌드 복잡도 및 제로 의존성 원칙 유지를 위해 배제) | 순수 파이썬 환경의 높은 이식성 유지 |
 
 ---
 
-## 4. 핵심 성공 지표 (KPI / Success Metrics)
+## 4. 핵심 성공 지표 (KPI)
 
-| 지표명 | 측정 방식 / 기준 | 목표치 (Target) |
-| :--- | :--- | :--- |
-| **외부 의존성 개수 (External Dependencies)** | `pyproject.toml` / `setup.py`의 런타임 `dependencies` 항목 검사 | **정확히 0개 (Zero Dependency)** |
-| **정적 타입 검사 무결성** | `mypy --strict` 및 `pyright --strict` 전체 소스코드 정적 분석 에러 수 | **0건 (Zero Type Error)** |
-| **불변성 보장율 (Immutability)** | 모든 컬렉션/문자열 조작 함수 실행 시 인자 객체 원본 ID 및 값 변경 여부 | **100% 불변 보장 (Zero Mutation)** |
-| **보일러플레이트 코드 감소율** | 청킹, 재시도, 레이트 리미팅, 중첩 조회 구현 시 작성 코드 라인 수 비교 | $\ge 70\%$ 감소 |
-| **테스트 코드 라인 커버리지** | `pytest --cov` 기준 단위 및 엣지 케이스 테스트 커버리지 | $\ge 95\%$ |
-| **함수 호출 오버헤드 (Overhead)** | 순수 기본 연산 대비 유틸리티 래핑 실행 지연시간 오버헤드 | 코어 연산당 $\le 5\mu\text{s}$ |
-| **스레드 동시성 결함률** | `RateLimiter`, `memoize`, `once` 등에 대한 100 워커 멀티스레드 경합 테스트 | **0건 (Race-Condition Free)** |
+| 지표명 | 측정 기준 | 목표치 | 비고 |
+| :--- | :--- | :--- | :--- |
+| **외부 런타임 의존성** | `pyproject.toml` 내 `dependencies` 목록 | **0개** | 순수 파이썬 표준 라이브러리만 사용 |
+| **정적 타입 검사 무결성** | `mypy --strict` 및 `pyright` 검사 결과 | **에러 0건** | PEP 561, PEP 612 준수 |
+| **원본 불변성 유지율** | 컬렉션/문자열 함수 실행 전후 원본 메모리 ID 및 데이터 변이 여부 | **100% 보존** | 원본 변이(In-place mutation) 0건 |
+| **테스트 라인 커버리지** | `pytest --cov=quiver` 단위/통합 테스트 | $\ge 95\%$ | 엣지 케이스 및 경합 조건 포함 |
+| **스레드 안전성** | 100개 스레드 동시 진입 시 데이터 레이스 및 데드락 발생 건수 | **0건** | `threading.Lock` / `RLock` 검증 |
 
 ---
 
-## 5. 비기능적 요구사항 (Non-Functional Requirements)
+## 5. 비기능적 요구사항 및 트레이드오프 (Non-Functional Requirements & Trade-offs)
 
-- **성능 (Performance)**:
-  - 제너레이터 기반 지연 평가(Lazy Evaluation)를 지원하여 메모리 사용량을 최소화할 수 있어야 함.
-  - `Stopwatch` 및 `measure_time`은 OS 모노토닉 타이머(`time.perf_counter_ns`)를 사용하여 나노초급 정밀도를 제공해야 함.
-- **보안 및 무결성 (Security & Integrity)**:
-  - `mask_sensitive`는 주민등록번호, 신용카드 번호, 이메일 주소, 전화번호의 표준 패턴을 안정적으로 감지하고 원본 민감 문자열을 메모리에서 안전하게 대체해야 함.
-  - 서드파티 패키지가 일체 없으므로 패키지 배포 시 외부 공급망 공격(Supply Chain Attack) 벡터를 원천 차단함.
-- **호환성 및 표준 (Compatibility & Standards)**:
-  - Python 3.10, 3.11, 3.12, 3.13 공식 지원 및 완벽한 인터프리터 호환성 보장.
-  - PEP 561(`py.typed`), PEP 8(코딩 스타일), PEP 484/585/612(타입 어노테이션) 표준을 100% 준수.
-- **신뢰성 및 동시성 (Reliability & Concurrency)**:
-  - 동시성 제어가 필요한 모듈(`RateLimiter`, `once`, `memoize`, `debounce`, `throttle`)은 `threading.Lock` / `threading.RLock`을 활용하여 멀티스레드 환경에서 안전(Thread-safe)해야 함.
-  - 모든 예외는 사전에 정의된 표준 Python 빌트인 예외(`ValueError`, `TypeError`, `KeyError` 등) 또는 명확한 커스텀 패키지 예외 계층을 따름.
+### 5.1 성능과 메모리 트레이드오프
+- **지연 평가(Lazy Evaluation) 우선**: `chunk`, `windowed` 등 대용량 데이터 순회가 예상되는 함수는 메모리 점유를 최소화하기 위해 제너레이터 이터레이터(`Iterator[T]`)를 반환합니다.
+- **불변 복사 비용(Copy Overhead)**: `deep_set`과 `merge`는 원본 변이를 방지하기 위해 신규 복사본을 생성합니다. 극도로 깊은 계층이나 수십만 건의 대형 딕셔너리를 다룰 때는 복사 비용이 발생할 수 있으며, 이는 안전성을 위해 감수하는 의도된 설계입니다.
+
+### 5.2 환경 호환성
+- **지원 인터프리터**: Python 3.10, 3.11, 3.12, 3.13 공식 지원 (CPython).
+- **타이머 기준**: 시스템 시계 변경(NTP 동기화 등)으로 인한 시간 왜곡을 방지하기 위해 시간 측정 및 속도 제한 로직에는 `time.perf_counter_ns`와 `time.monotonic`만 사용합니다.
