@@ -2,7 +2,7 @@
 
 - **작성일자**: 2026-09-23
 - **작성자**: 기획 명세 작성가 (`spec-writer`)
-- **문서 버전**: v1.0
+- **문서 버전**: v1.1 (Traceability & Acceptance Criteria 강화 개정판)
 - **상태**: Approved
 
 ---
@@ -72,7 +72,9 @@ journey
 
 ---
 
-## 3. 기능 요구사항 및 우선순위 (Feature Requirements)
+## 3. 기능 요구사항 및 인수 판정 기준 (Feature Requirements & Acceptance Criteria)
+
+### 3.1 요구사항 목록 및 MoSCoW 매트릭스
 
 | 요구사항 ID | 도메인 | 요구사항 명칭 및 상세 설명 | 우선순위 (MoSCoW) | 선정 사유 및 기술적 고려사항 |
 | :--- | :--- | :--- | :---: | :--- |
@@ -88,16 +90,120 @@ journey
 
 ---
 
+### 3.2 요구사항별 상세 인수 판정 기준 (Acceptance Criteria)
+
+각 요구사항은 백엔드 TDD 엔지니어가 단위 및 통합 테스트 코드를 즉각 작성할 수 있도록 정상, 예외, 검증 기준이 수학적/명제적으로 정의됩니다.
+
+#### [REQ-HARN-001] 다중 소스 하네스 프로바이더 및 파서
+- **정상 조건 (Happy Path)**:
+  - `HarnessProvider.from_fs(path)`, `HarnessProvider.from_upload(zip_bytes)`, `HarnessProvider.from_db(session, tenant_id)`를 통해 `AGENTS.md` 및 `.agents/` 디렉토리를 로드하여 불변 `HarnessSnapshot` DTO를 반환해야 한다.
+  - 마크다운 파일 상단의 YAML 프론트매터(`name`, `description`, `tools`, `skills` 등)는 Pydantic 스키마 검증을 통과하여 사전 구조체로 변환되어야 한다.
+  - 하네스 파싱 및 스냅샷 생성 총 소요 시간은 $\le 20\text{ms}$이어야 한다.
+- **예외/경계 조건 (Edge/Exception Path)**:
+  - 지정된 경로에 하네스 설정이 누락된 경우 `HarnessNotFoundError`를 발생시켜야 한다.
+  - YAML 문법 오류 또는 필수 필드 누락 시 파싱 실패 라인을 포함한 `HarnessParseError`를 발생시켜야 한다.
+  - Zip 압축 해제 시 `../` 등 상위 디렉토리 탈출(ZipSlip) 경로가 포함된 경우 `ZipSlipSecurityError`를 즉시 발생시키고 파일 쓰기를 전면 중단해야 한다.
+- **TDD 검증 기준 (Verification Criteria)**:
+  - FS, Zip, DB 모의 픽스처 대상 로드 단위 테스트 성공률 $100\%$.
+  - 악의적인 ZipSlip 페이로드 10종 주입 시 차단 검증.
+
+#### [REQ-SESS-001] 세션 단위 하네스 동적 바인딩 및 런타임 컴파일
+- **정상 조건 (Happy Path)**:
+  - `archon.create_session(provider)` 호출 시 고유 세션 ID(`sess_<uuid4>`)를 발급하고, 하네스 스냅샷의 규칙과 도구를 바인딩한 불변 `AgentSession` 인스턴스를 반환해야 한다.
+  - 컴파일된 시스템 프롬프트는 헌법(`AGENTS.md`), 전역 규칙(`.agents/rules`), 사용 가능 도구 명세를 순서대로 결합해야 한다.
+  - 각 세션은 독립된 `ToolRegistry` 인스턴스를 소유하여 타 세션과 도구 등록 상태를 공유하지 않아야 한다.
+- **예외/경계 조건 (Edge/Exception Path)**:
+  - 세션 유휴 시간 또는 실행 시간이 `session_timeout`(기본 600초)을 초과하면 `SessionTimeoutError`를 발생시키고 실행 중인 코루틴을 강제 취소해야 한다.
+  - 명시적으로 종료된 세션(`session.close()`)에 작업 실행을 요청할 경우 `SessionClosedError`를 발생시켜야 한다.
+- **TDD 검증 기준 (Verification Criteria)**:
+  - 50개 세션 동시 생성 시 세션 간 프롬프트, 도구 레지스트리 교차 오염 발생 $0\text{건}$.
+  - 세션 종료 후 리소스 및 열린 핸들 누수 $0\text{건}$ 검증.
+
+#### [REQ-SUB-001] 모듈러 다중 서브에이전트 비동기 동시 호출 (`invoke_subagents`)
+- **정상 조건 (Happy Path)**:
+  - 메인 에이전트가 `invoke_subagents(subagents=[...], tasks=[...])`를 호출하면 `asyncio.gather(..., return_exceptions=True)`로 복수 서브에이전트를 병렬 실행해야 한다.
+  - 모든 서브에이전트가 정상 완료되면 각 에이전트의 출력, 소요시간, 상태코드를 취합한 `List[SubagentResult]`를 반환해야 한다.
+  - 서브에이전트는 지정된 동시성 세마포어(기본 최대 10개) 한도 내에서 스케줄링되어야 한다.
+- **예외/경계 조건 (Edge/Exception Path)**:
+  - 호출 체인 깊이가 `max_subagent_depth`(기본 3단계)를 초과할 경우 `RecursionDepthExceededError`를 발생시키며 즉시 실행을 거부해야 한다.
+  - 부모-자식 호출 체인 내에서 동일한 서브에이전트가 다시 호출되는 순환 참조(`A -> B -> A`) 감지 시 `SubagentCycleDetectedError`를 발생시켜야 한다.
+  - 특정 서브에이전트가 `subagent_timeout`(기본 120초)을 초과한 경우 해당 서브에이전트만 `is_timeout=True`로 마킹되고 다른 병렬 에이전트의 성공 결과는 정상 보존되어야 한다 (Partial Failure Tolerance).
+- **TDD 검증 기준 (Verification Criteria)**:
+  - 5개 서브에이전트 동시 호출 1,000회 스트레스 테스트 시 데드락 없는 완료율 $\ge 99.5\%$.
+  - 4단계 재귀 진입 차단 및 순환 호출 체인 100% 탐지 차단 검증.
+
+#### [REQ-TOOL-001] 보안 Bash 및 툴 실행 엔진 (`ToolRegistry`, `@tool`)
+- **정상 조건 (Happy Path)**:
+  - `@tool` 데코레이터가 적용된 임의의 파이썬 함수를 `ToolRegistry`에 등록하고, LLM 호출을 위한 OpenAPI/JSON Schema 규격 메타데이터를 자동 생성해야 한다.
+  - 내장 Bash 도구 실행 시 허용된 작업 디렉토리(`cwd`) 내에서 명령(`pytest`, `git status` 등)을 실행하고 종료 코드, 표준 출력, 표준 에러를 반환해야 한다.
+- **예외/경계 조건 (Edge/Exception Path)**:
+  - 실행 커맨드에 위험 명령어 블랙리스트(`rm -rf /`, `sudo`, `mkfs`, 포크 폭탄 등) 정규식 매칭 시 즉시 `DangerousCommandError`를 발생시키고 실행을 거부해야 한다.
+  - `cd /` 또는 `../../` 등을 통해 작업 디렉토리 상위로 탈출을 시도하는 경로는 `PathTraversalError`로 차단해야 한다.
+  - 커맨드 실행 시간이 `command_timeout`(기본 60초)을 초과할 경우 `os.killpg`를 호출하여 하위 프로세스 그룹 전체를 즉시 강제 종료하고 `CommandTimeoutError`를 반환해야 한다.
+  - 출력 버퍼가 1MB를 초과하면 버퍼 오버플로우 방지를 위해 앞부분 1MB만 보존하고 나머지는 절삭(Truncate)해야 한다.
+- **TDD 검증 기준 (Verification Criteria)**:
+  - 위험 명령어 50종 모의 주입 시 차단율 $100\%$ (완전 차단).
+  - 60초 초과 슬립 명령 강제 종료 후 좀비 프로세스 잔존 $0\text{건}$.
+
+#### [REQ-SKIL-001] 독립 스킬(Skill Isolation) 온디맨드 프로그레시브 주입
+- **정상 조건 (Happy Path)**:
+  - 서브에이전트 매니페스트에 선언된 스킬 목록(`skills: [git, humanizer]`)에 해당하는 스킬 마크다운 파일만 컨텍스트에 점진적으로 주입해야 한다.
+  - 주입된 스킬 가이드는 불변 캐시되어 세션 내 동일 스킬 재요청 시 파싱 지연 없이 즉시 제공되어야 한다.
+- **예외/경계 조건 (Edge/Exception Path)**:
+  - 스킬 파일 본문 내에서 타 스킬을 참조하거나 임포트하는 행위(`skill:`, `import`, `@skill` 등) 감지 시 정적 린터가 `SkillIsolationViolationError`를 발생시키며 세션 컴파일을 전면 거부해야 한다.
+  - 선언부에 기재된 스킬이 `.agents/skills`에 존재하지 않을 경우 `SkillNotFoundError`를 발생시켜야 한다.
+- **TDD 검증 기준 (Verification Criteria)**:
+  - 스킬 간 참조 모의 파일 10종 대상 정적 린트 차단율 $100\%$ (Zero Tolerance).
+  - 불필요한 미사용 스킬의 프롬프트 컨텍스트 유입 $0\text{건}$.
+
+#### [REQ-MOD-001] 멀티 LLM 모델 어댑터 및 스트리밍 처리
+- **정상 조건 (Happy Path)**:
+  - OpenAI, Anthropic, Gemini API와의 스트리밍 통신 청크를 표준 인터페이스로 수신하고, 툴 호출(Tool Call) 요청을 역직렬화하여 라우팅해야 한다.
+  - Pydantic v2 `BaseModel`을 인자로 전달하여 모델의 응답을 엄격한 타입의 구조화 출력(Structured Outputs)으로 파싱해야 한다.
+- **예외/경계 조건 (Edge/Exception Path)**:
+  - 모델 API 일시 장애(500, 502, 503, 504, 429) 수신 시 Full Jitter 지수 백오프 공식에 따라 최대 3회 자동 재시도해야 한다.
+  - 모델 응답 본문이 요구한 Pydantic 스키마와 불일치할 경우 `ModelResponseValidationError`를 발생시켜야 한다.
+- **TDD 검증 기준 (Verification Criteria)**:
+  - 모의 LLM 스트리밍 청크 및 도구 호출 직렬화 단위 테스트 통과율 $100\%$.
+
+#### [REQ-BUS-001] 반응형 이벤트 메시지 버스 (Message Bus)
+- **정상 조건 (Happy Path)**:
+  - 세션 내에서 에이전트 간 1:1 메시지 전송(`send_message`) 및 브로드캐스트 이벤트를 비동기로 발행/구독할 수 있어야 한다.
+  - 새 메시지 수신 시 대기 중인 수신 에이전트를 깨우는 리액티브 웨이크업(Reactive Wakeup)이 지연 없이 동작해야 한다.
+- **예외/경계 조건 (Edge/Exception Path)**:
+  - 존재하지 않는 수신자 ID로 메시지 발송 시 `InvalidRecipientError`를 발생시켜야 한다.
+  - 세션 종료 후 메시지 버스에 발행 시도 시 `MessageBusClosedError`를 반환해야 한다.
+- **TDD 검증 기준 (Verification Criteria)**:
+  - 1,000건 동시 메시지 발행/수신 시 메시지 유실 $0\text{건}$, FIFO 순서 보장 검증.
+
+#### [REQ-VIS-001] 에이전트 실행 궤적 트레이싱 (Trace Logger)
+- **정상 조건 (Happy Path)**:
+  - 세션 ID, 에이전트 이름, 실행 단계, 프롬프트 토큰 수, 소요시간(ms), 도구 호출 입출력을 구조화된 JSON 스팬으로 기록해야 한다.
+- **예외/경계 조건 (Edge/Exception Path)**:
+  - 로거 디스크 I/O 오류 발생 시 비즈니스 에이전트 코루틴이 중단되지 않도록 로깅 예외를 안전하게 격리 흡수해야 한다.
+- **TDD 검증 기준 (Verification Criteria)**:
+  - 100회 에이전트 실행 시 궤적 로그 누락 $0\text{건}$.
+
+#### [REQ-DOCK-001] 도커 컨테이너 격리 툴 실행기 (Won't Have v1 / Could Have v2)
+- **정상 조건 (Happy Path)**:
+  - v2 개발 범위로, 호스트 OS 대신 격리된 일회성 Docker 컨테이너 컨텍스트에서 Bash 명령을 실행하고 컨테이너를 즉시 파기한다.
+- **예외/경계 조건 (Edge/Exception Path)**:
+  - Docker 데몬 연결 불가 시 v1 서브프로세스 샌드박스로 안전하게 폴백한다.
+- **TDD 검증 기준 (Verification Criteria)**:
+  - v2 릴리즈 시 격리 실행 테스트 수립.
+
+---
+
 ## 4. 정량적 성공 지표 (Measurable KPIs)
 
-| 지표명 | 측정 기준 및 테스트 시나리오 | 목표치 |
-| :--- | :--- | :--- |
-| **하네스 로드 및 컴파일 지연** | FS 및 DB 소스에서 하네스 파싱 후 `AgentSession` 생성 완료까지의 시간 | **$\le 20\text{ms}$** |
-| **비동기 동시 호출 성공률** | 5개 서브에이전트 병렬 호출 1,000회 스트레스 테스트 시 데드락 없는 완료율 | **$\ge 99.5\%$** |
-| **스킬 독립성 위반 차단율** | 스킬 내부에서 타 스킬 참조/호출 시도 시 런타임 사전 검증 차단율 | **100% (Zero Tolerance)** |
-| **위험 Bash 명령어 차단율** | 블랙리스트 명령어(`rm -rf`, `sudo`, `mkfs` 등) 50종 모의 주입 시 차단율 | **100% (완전 차단)** |
-| **동시 세션 리소스 격리도** | 50개 동시 세션 실행 시 세션 간 프롬프트, 도구 레지스트리 교차 오염 발생 건수 | **0건 (완벽 격리)** |
-| **테스트 코드 라인 커버리지** | `pytest` 기준 단위 및 통합 테스트 커버리지 | **$\ge 90\%$** |
+| 지표명 | 측정 기준 및 테스트 시나리오 | 목표치 | 대응 요구사항 ID |
+| :--- | :--- | :--- | :---: |
+| **하네스 로드 및 컴파일 지연** | FS 및 DB 소스에서 하네스 파싱 후 `AgentSession` 생성 완료까지의 시간 | **$\le 20\text{ms}$** | `REQ-HARN-001`, `REQ-SESS-001` |
+| **비동기 동시 호출 성공률** | 5개 서브에이전트 병렬 호출 1,000회 스트레스 테스트 시 데드락 없는 완료율 | **$\ge 99.5\%$** | `REQ-SUB-001` |
+| **스킬 독립성 위반 차단율** | 스킬 내부에서 타 스킬 참조/호출 시도 시 런타임 사전 검증 차단율 | **100% (Zero Tolerance)** | `REQ-SKIL-001` |
+| **위험 Bash 명령어 차단율** | 블랙리스트 명령어(`rm -rf`, `sudo`, `mkfs` 등) 50종 모의 주입 시 차단율 | **100% (완전 차단)** | `REQ-TOOL-001` |
+| **동시 세션 리소스 격리도** | 50개 동시 세션 실행 시 세션 간 프롬프트, 도구 레지스트리 교차 오염 발생 건수 | **0건 (완벽 격리)** | `REQ-SESS-001` |
+| **테스트 코드 라인 커버리지** | `pytest` 기준 단위 및 통합 테스트 커버리지 | **$\ge 90\%$** | 전체 요구사항 공통 |
 
 ---
 

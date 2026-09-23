@@ -116,55 +116,78 @@ flowchart TD
 
 ---
 
-### 3.2 핵심 아키텍처 결정 상세 (ADR-001 ~ ADR-006)
+### 3.2 요구사항 추적성 매트릭스 및 핵심 아키텍처 결정 상세 (ADR-001 ~ ADR-006)
+
+#### 요구사항 추적성 매트릭스 (Requirements Traceability Matrix)
+
+| 아키텍처 결정 ID | 아키텍처 결정 명칭 | 해결 대상 PRD 요구사항 ID | 핵심 기능정의 ID (FSD) | 핵심 해결 가치 및 보장 메커니즘 |
+| :--- | :--- | :---: | :---: | :--- |
+| **ADR-001** | 하네스 엔지니어링 퍼스트 아키텍처 | `REQ-HARN-001` | `FUNC-HARN-001`, `FUNC-HARN-002` | 선언적 거버넌스 수용 및 파이썬 코드 수정 없는 프롬프트/룰 제어 |
+| **ADR-002** | 플러그형 다중 소스 하네스 프로바이더 패턴 | `REQ-HARN-001` | `FUNC-HARN-001` | FS, Zip 업로드, DB 다중 소스 지원 및 ZipSlip 보안 차단 |
+| **ADR-003** | 세션 스코프 런타임 컴파일 및 바인딩 모델 | `REQ-SESS-001` | `FUNC-SESS-001`, `FUNC-CORE-001` | 세션 단위 불변 실행 컨텍스트 및 툴/스킬 레지스트리 교차 오염 0% |
+| **ADR-004** | 메인/서브에이전트 비동기 동시 오케스트레이션 | `REQ-SUB-001`, `REQ-BUS-001` | `FUNC-SUB-001`, `FUNC-SUB-002` | `asyncio.gather` 부분 성공 수집, 깊이 제한(`max_depth=3`) 및 순환 방지 |
+| **ADR-005** | 보안 Bash 실행기 및 툴 샌드박스 경계 | `REQ-TOOL-001` | `FUNC-TOOL-001`, `FUNC-TOOL-002` | 작업 디렉토리 감금, 위험 명령어 차단, `os.setsid/killpg` 좀비 방지 |
+| **ADR-006** | 스킬 독립성(Skill Isolation) 강제 메커니즘 | `REQ-SKIL-001` | `FUNC-SKIL-001`, `FUNC-SKIL-002` | 스킬 간 상호 참조 금지 린터 및 온디맨드 점진적 주입 |
+
+---
 
 #### ADR-001: 하네스 엔지니어링 퍼스트 아키텍처 및 선언적 거버넌스 수용
-- **결정 내용**:
+- **해결 대상 요구사항 (Target Requirements)**:
+  - `REQ-HARN-001` (다중 소스 하네스 프로바이더 및 파서)
+- **인수 기준 충족 방안 (Acceptance Criteria Fulfillment)**:
   - 시스템 프롬프트, 도구 허용 목록, 코딩 룰, 역할 정의를 파이썬 코드에서 완전히 분리하고, 표준 마크다운/YAML 디렉터리 구조(`AGENTS.md`, `.agents/rules/`, `.agents/skills/`, `.agents/subagents/`)로 선언합니다.
-  - `AGENTS.md`는 파이프라인의 최고 헌법(Constitution)으로 동작하며, 런타임에 최우선 시스템 지시문으로 파싱됩니다.
+  - `AGENTS.md`를 파이프라인의 최고 헌법(Top-Level Constitution)으로 규정하여 런타임에 최우선 시스템 지시문으로 파싱하며, 하네스 파싱 및 스냅샷 생성 지연을 $20\text{ms}$ 이하로 보장합니다.
 - **선정 사유 (Why)**:
-  - 프롬프트 튜닝이나 업무 규칙 변경 시 파이썬 코드를 건드리지 않고 파일 수정만으로 동작을 바꿀 수 있어 거버넌스 유지보수성이 극대화됩니다.
+  - 프롬프트 튜닝이나 업무 규칙 변경 시 파이썬 소스코드를 건드리지 않고 파일 수정만으로 동작을 바꿀 수 있어 거버넌스 유지보수성이 극대화됩니다.
 - **실무 주의점 (Gotcha)**:
   - 마크다운 파싱 시 정규식에만 의존하면 복잡한 코드 블록 내의 마크다운 태그를 오인식할 수 있으므로, 엄격한 줄 단위 파서와 YAML SafeLoader를 결합하여 AST를 구축해야 합니다.
 
 #### ADR-002: 플러그형 다중 소스 하네스 프로바이더 패턴 (`HarnessProvider`)
-- **결정 내용**:
-  - `HarnessProvider` 추상 베이스 클래스를 정의하고, 세 가지 구현체를 제공합니다:
-    1. `FileSystemProvider`: 로컬 파일시스템 경로에서 하네스 로드 (로컬 개발/CLI 환경).
+- **해결 대상 요구사항 (Target Requirements)**:
+  - `REQ-HARN-001` (다중 소스 하네스 프로바이더 및 파서)
+- **인수 기준 충족 방안 (Acceptance Criteria Fulfillment)**:
+  - `HarnessProvider` 추상 베이스 클래스를 정의하고 세 가지 구현체를 제공합니다:
+    1. `FileSystemProvider`: 로컬 파일시스템 경로에서 하네스 로드 (로컬 개발 및 CLI 환경).
     2. `UploadProvider`: 웹/API로 인입된 Zip/Tar 바이트 스트림을 인메모리에서 안전하게 파싱 (SaaS 환경).
     3. `DatabaseProvider`: SQLAlchemy 세션과 테넌트 식별자(`tenant_id`)를 통해 DB 테이블에서 하네스 레코드 인출 (엔터프라이즈 환경).
-  - 모든 프로바이더는 최종적으로 완전히 검증된 불변 객체인 `HarnessSnapshot`을 생성하여 반환합니다.
+  - 모든 프로바이더는 구체적 저장소 구현에 무관하게 동일한 불변 객체인 `HarnessSnapshot`을 생성하여 반환합니다.
 - **선정 사유 (Why)**:
   - 상위 오케스트레이터와 세션 엔진은 하네스가 로컬 파일인지, 메모리 Zip인지, DB인지 알 필요 없이 일관된 스냅샷 객체만 다루므로 완벽한 계층 분리가 이루어집니다.
 - **보안 가드 (ZipSlip 방어)**:
   - `UploadProvider`는 인메모리 압축 해제 루프에서 파일 경로를 정규화(`os.path.commonpath`)하여 `../../etc/passwd` 등 상위 디렉토리 탈출 시도가 감지되면 즉시 `HarnessSecurityError`를 발생시키고 전체 바이트를 폐기합니다.
 
 #### ADR-003: 세션 스코프 런타임 컴파일 및 바인딩 모델 (`AgentSession`)
-- **결정 내용**:
+- **해결 대상 요구사항 (Target Requirements)**:
+  - `REQ-SESS-001` (세션 단위 하네스 동적 바인딩 및 런타임 컴파일)
+- **인수 기준 충족 방안 (Acceptance Criteria Fulfillment)**:
   - 세션 생성 함수 `archon.create_session(harness=snapshot)` 호출 시, `session_id`(UUIDv4)를 발급하고 독립된 메모리 스코프를 할당합니다.
   - 시스템 프롬프트는 `AGENTS.md`와 `.agents/rules`를 합성하여 1회 컴파일한 뒤 불변(Frozen) 문자열로 캐싱합니다.
-  - 도구 레지스트리(`ToolRegistry`)와 스킬 레지스트리(`SkillRegistry`)를 세션 스코프로 딥카피(Deep Copy)하여 바인딩합니다.
+  - 도구 레지스트리(`ToolRegistry`)와 스킬 레지스트리(`SkillRegistry`)를 세션 스코프로 딥카피(Deep Copy)하여 바인딩함으로써, 50개 동시 세션 실행 시 세션 간 교차 오염 발생 건수 0건을 달성합니다.
 - **선정 사유 (Why)**:
   - 멀티 테넌트 동시 요청 시 세션 간에 프롬프트가 오염되거나 특정 세션에서 등록한 커스텀 툴이 타 세션으로 유출되는 교차 오염(Cross-Contamination)을 원천 차단합니다.
 - **실무 주의점 (Gotcha)**:
   - 세션이 종료될 때(`session.close()` 또는 `session_timeout` 만료) 세션 내부에서 실행 중이던 모든 백그라운드 코루틴에 `asyncio.CancelledError`를 전파하고, 할당된 임시 리소스를 명시적으로 회수해야 메모리 누수가 발생하지 않습니다.
 
 #### ADR-004: 메인/서브에이전트 비동기 동시 오케스트레이션 및 재귀 깊이 제어
-- **결정 내용**:
-  - 복수 서브에이전트 호출 API `await session.invoke_subagents([req1, req2, ...])`는 `asyncio.gather(*tasks, return_exceptions=True)`를 기반으로 동작합니다.
+- **해결 대상 요구사항 (Target Requirements)**:
+  - `REQ-SUB-001` (모듈러 다중 서브에이전트 비동기 동시 호출), `REQ-BUS-001` (반응형 이벤트 메시지 버스)
+- **인수 기준 충족 방안 (Acceptance Criteria Fulfillment)**:
+  - 복수 서브에이전트 호출 API `await session.invoke_subagents([req1, req2, ...])`는 `asyncio.gather(*tasks, return_exceptions=True)`를 기반으로 완전 병렬 실행됩니다.
   - **부분 성공 수집 (Fault-Tolerant Partial Collection)**: 3개의 서브에이전트 중 1개가 타임아웃으로 실패하더라도 전체가 중단되지 않고, 성공한 2개의 산출물은 보존하여 `SubagentResult` 목록으로 취합 반환합니다.
   - **재귀 깊이 및 순환 호출 차단 (Depth & Cycle Guard)**:
     - 최대 재귀 호출 깊이를 `max_subagent_depth = 3`으로 엄격히 강제합니다 (Root $\rightarrow$ Depth 1 $\rightarrow$ Depth 2 $\rightarrow$ Depth 3).
     - 호출 체인에 부모 계통 리스트(`caller_lineage`)를 불변으로 유지하여, 체인 내 순환 호출(A $\rightarrow$ B $\rightarrow$ A) 감지 시 즉시 `SubagentCycleDetectedError`를 던집니다.
-  - **동시성 세마포어**: 세션당 동시 실행 서브에이전트 수를 `asyncio.Semaphore(10)`으로 제한하여 이벤트 루프 고갈을 방지합니다.
+  - **동시성 세마포어**: 세션당 동시 실행 서브에이전트 수를 `asyncio.Semaphore(10)`으로 제한하여 이벤트 루프 고갈을 방지하고 `MessageBus`를 통해 진행 상태 이벤트를 실시간 전파합니다.
 - **선정 사유 (Why)**:
   - 프론트엔드 TDD 에이전트와 백엔드 TDD 에이전트처럼 상호 독립적인 작업을 순차 실행 대비 2~3배 빠르게 완료할 수 있으며, 포크 폭탄(Fork Bomb) 사고를 방지합니다.
 
 #### ADR-005: 보안 Bash 실행기 및 툴 샌드박스 경계
-- **결정 내용**:
+- **해결 대상 요구사항 (Target Requirements)**:
+  - `REQ-TOOL-001` (보안 Bash 및 툴 실행 엔진)
+- **인수 기준 충족 방안 (Acceptance Criteria Fulfillment)**:
   - 에이전트가 테스트 실행 및 파일 조작을 위해 사용하는 `BashTool`에 다층 보안 샌드박스를 강제합니다:
-    1. **디렉토리 감금 (Directory Jail)**: `working_directory` 상위로 벗어나는 명령어(`cd ../../../` 등) 사전 차단.
-    2. **위험 명령어 정규식 블랙리스트**: `rm -rf /`, `sudo`, `su`, `dd`, `mkfs`, `shutdown`, `:(){ :|:& };:`(포크폭탄) 등을 실행 전 100% 차단.
+    1. **디렉토리 감금 (Directory Jail)**: `working_directory` 상위로 벗어나는 명령어(`cd ../../../` 등)를 실행 전 차단.
+    2. **위험 명령어 정규식 블랙리스트**: `rm -rf /`, `sudo`, `su`, `dd`, `mkfs`, `shutdown`, `:(){ :|:& };:`(포크폭탄) 등 50종 모의 주입 시 100% 사전 차단 (`ToolSecurityError`).
     3. **프로세스 그룹 격리 및 강제 회수**: `asyncio.create_subprocess_shell` 호출 시 `preexec_fn=os.setsid`로 프로세스 그룹을 분리하고, 타임아웃(기본 30초) 발생 시 `os.killpg(os.getpgid(proc.pid), signal.SIGKILL)`로 자식 프로세스 트리를 강제 종료하여 좀비 프로세스를 방지.
     4. **출력 버퍼 절삭 (Truncation)**: `stdout`/`stderr` 버퍼 크기를 1MB로 제한하여 대용량 로그 출력으로 인한 프로세스 OOM 방어.
 - **선정 사유 (Why)**:
@@ -173,9 +196,11 @@ flowchart TD
   - 정규식 및 서브프로세스 감금은 일반적인 실수와 파일시스템 파괴를 막아주지만 커널 레벨의 완전 가상화는 아닙니다. 임의 사용자가 업로드한 악성 바이너리를 직접 실행해야 하는 환경에서는 v2에서 제공될 Docker 컨테이너 격리 프로바이더를 사용해야 합니다.
 
 #### ADR-006: 스킬 독립성(Skill Isolation) 원칙 강제 메커니즘
-- **결정 내용**:
+- **해결 대상 요구사항 (Target Requirements)**:
+  - `REQ-SKIL-001` (독립 스킬 온디맨드 프로그레시브 주입)
+- **인수 기준 충족 방안 (Acceptance Criteria Fulfillment)**:
   - **스킬 간 상호 참조 절대 금지**: 모든 스킬(`SKILL.md`)은 원자적(Atomic)이어야 하며, 스킬 파일 내부에서 다른 스킬의 이름, 경로, 호출 구문을 포함할 수 없습니다.
-  - **정적 린터(Linter) 검증**: 하네스 파싱 시 정적 린터가 모든 스킬 텍스트를 검사하여 타 스킬 참조가 발견되면 즉시 `SkillIsolationViolationError`를 던져 하네스 로드를 거부합니다.
+  - **정적 린터(Linter) 검증**: 하네스 파싱 시 정적 린터가 모든 스킬 텍스트를 검사하여 타 스킬 참조가 발견되면 즉시 `SkillIsolationViolationError`를 던져 하네스 로드를 100% 차단합니다 (Zero Tolerance).
   - **온디맨드 프로그레시브 주입 (Progressive Disclosure)**: 스킬은 오직 서브에이전트 명세에 선언된 경우에만 해당 서브에이전트 실행 시점에 시스템 프롬프트 하단에 점진적으로 주입되며, 실행 종료 후 즉시 격리 회수됩니다.
 - **선정 사유 (Why)**:
   - 스킬 간 의존성이 얽혀 스킬 하나 수정 시 다른 스킬이 깨지는 스파게티 의존성을 방지하고, 불필요한 스킬 텍스트로 인한 토큰 낭비를 원천 차단합니다.

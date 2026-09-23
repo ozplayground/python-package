@@ -2,7 +2,7 @@
 
 - **도메인**: 에이전트 하네스 거버넌스 및 분산 서브에이전트 오케스트레이션
 - **작성자**: 기획 명세 작성가 (`spec-writer`)
-- **문서 버전**: v1.0
+- **문서 버전**: v1.1 (REQ 인수 기준 전면 바인딩 개정판)
 - **상태**: Approved
 
 ---
@@ -12,6 +12,19 @@
 ---
 
 ### [FUNC-HARN-001] 다중 소스 하네스 프로바이더 및 파서 (Multi-Source Harness Provider & Parser)
+
+#### 0. 대응 요구사항 및 인수 판정 기준 바인딩 (Requirements & Acceptance Criteria Binding)
+- **대응 요구사항 ID**: `REQ-HARN-001` (다중 소스 하네스 프로바이더 및 파서)
+- **정상 판정 기준 (Happy Path)**:
+  - `HarnessProvider.from_fs(path)`, `HarnessProvider.from_upload(zip_bytes)`, `HarnessProvider.from_db(session, tenant_id)`를 통해 `AGENTS.md` 및 `.agents/` 디렉토리를 로드하여 불변 `HarnessSnapshot` DTO 생성에 성공해야 한다.
+  - 마크다운 프론트매터 파싱 및 Pydantic 스키마 검증을 거쳐 `HarnessSnapshot` 완제본 생성까지의 소요 시간은 $\le 20\text{ms}$이어야 한다.
+- **예외/실패 판정 기준 (Edge/Exception Path)**:
+  - 대상 경로 또는 테넌트 하네스 부재 시 `HarnessNotFoundError` (`ERR_HARN_NOT_FOUND`)를 발생시켜야 한다.
+  - 마크다운 프론트매터 YAML 문법 오류 또는 필수 필드 누락 시 파싱 라인 번호를 명시한 `HarnessParseError` (`ERR_HARN_PARSE_FAILED`)를 발생시켜야 한다.
+  - 업로드 압축파일 내 `../` 등 상위 디렉토리 탈출(ZipSlip) 경로 탐지 시 즉시 `HarnessSecurityError` (`ERR_HARN_PATH_TRAVERSAL`)를 발생시키고 압축 해제를 전면 중단해야 한다.
+- **단위 테스트 검증 조건 (TDD Target)**:
+  - FS, Zip, DB 모의 픽스처 3종에 대한 로드 단위 테스트 $100\%$ 성공 검증.
+  - 악의적인 상위 탈출 경로를 포함한 모의 Zip 파일 10종 주입 시 차단 검증.
 
 #### 1. 기본 정보
 - **기능명**: 다중 소스 하네스 프로바이더 (FS, Upload, DB) 및 정규화 파서
@@ -92,10 +105,23 @@ flowchart TD
 
 ### [FUNC-SESS-001] 세션 초기화 시 하네스 동적 바인딩 및 런타임 컴파일 (Dynamic Session Binding & Compiler)
 
+#### 0. 대응 요구사항 및 인수 판정 기준 바인딩 (Requirements & Acceptance Criteria Binding)
+- **대응 요구사항 ID**: `REQ-SESS-001` (세션 단위 하네스 동적 바인딩 및 런타임 컴파일), `REQ-MOD-001` (멀티 LLM 어댑터 및 구조화 출력)
+- **정상 판정 기준 (Happy Path)**:
+  - `archon.create_session(provider)` 호출 시 고유 세션 ID(`sess_<uuid4>`)를 발급하고, 하네스 스냅샷의 규칙과 도구를 바인딩한 불변 `AgentSession` 인스턴스를 반환해야 한다.
+  - 컴파일된 시스템 프롬프트는 헌법(`AGENTS.md`), 전역 규칙(`.agents/rules`), 사용 가능 도구 명세를 순서대로 결합해야 한다.
+  - 각 세션은 독립된 `ToolRegistry` 인스턴스를 소유하여 타 세션과 도구 등록 상태를 교차 공유하지 않아야 한다.
+- **예외/실패 판정 기준 (Edge/Exception Path)**:
+  - 세션 유휴/실행 시간 `session_timeout`(기본 600초) 초과 시 `SessionTimeoutError` (`ERR_SESS_TIMEOUT`)를 발생시키고 실행 중인 자식 태스크를 일괄 취소해야 한다.
+  - 명시적으로 종료된 세션(`session.close()`)에 작업 실행을 요청할 경우 `SessionClosedError` (`ERR_SESS_CLOSED`)를 발생시켜야 한다.
+- **단위 테스트 검증 조건 (TDD Target)**:
+  - 동시 50개 세션 생성 시 상호 컨텍스트 및 도구 레지스트리 누설 $0\text{건}$ 검증.
+  - 만료 타이머 인터럽트 발생 시 자식 프로세스 및 비동기 태스크 $100\%$ 정리 검증.
+
 #### 1. 기본 정보
 - **기능명**: 세션 초기화 시 하네스 동적 바인딩 및 불변 실행 컨텍스트 컴파일
 - **기능 ID**: `FUNC-SESS-001`
-- **대응 요구사항 ID**: `REQ-SESS-001`
+- **대응 요구사항 ID**: `REQ-SESS-001`, `REQ-MOD-001`
 - **대상 모듈 코드**: `MOD-SESSION-001`
 - **우선순위**: Must Have
 - **관련 액터 (Actor)**: AI 플랫폼 엔지니어, 세션 호출자
@@ -163,6 +189,20 @@ flowchart TD
 ---
 
 ### [FUNC-SUB-001] 모듈러 다중 서브에이전트 비동기 동시 호출 및 메시지 버스 (Subagent Orchestrator & Message Bus)
+
+#### 0. 대응 요구사항 및 인수 판정 기준 바인딩 (Requirements & Acceptance Criteria Binding)
+- **대응 요구사항 ID**: `REQ-SUB-001` (모듈러 다중 서브에이전트 비동기 동시 호출), `REQ-BUS-001` (반응형 이벤트 메시지 버스)
+- **정상 판정 기준 (Happy Path)**:
+  - 메인 에이전트가 `invoke_subagents(subagents=[...], tasks=[...])`를 호출하면 `asyncio.gather(..., return_exceptions=True)`로 복수 서브에이전트를 병렬 실행해야 한다.
+  - 모든 서브에이전트가 정상 완료되면 각 에이전트의 출력, 소요시간, 상태코드를 취합한 `List[SubagentResult]`를 반환해야 한다.
+  - 세션 내 `MessageBus`를 통해 발행-구독 방식으로 서브에이전트 간 비동기 메시지 교환 및 리액티브 웨이크업이 정상 작동해야 한다.
+- **예외/실패 판정 기준 (Edge/Exception Path)**:
+  - 호출 체인 깊이가 `max_subagent_depth`(기본 3단계)를 초과할 경우 `SubagentDepthExceededError` (`ERR_SUB_DEPTH_EXCEEDED`)를 발생시키며 즉시 실행을 거부해야 한다.
+  - 부모-자식 호출 체인 내에서 동일한 서브에이전트가 다시 호출되는 순환 참조(`A -> B -> A`) 감지 시 `SubagentCycleDetectedError` (`ERR_SUB_CYCLE_DETECTED`)를 발생시켜야 한다.
+  - 특정 서브에이전트가 `subagent_timeout`(기본 120초)을 초과한 경우 해당 서브에이전트만 `is_timeout=True`로 마킹되고 다른 병렬 에이전트의 성공 결과는 정상 보존되어야 한다 (Partial Failure Tolerance).
+- **단위 테스트 검증 조건 (TDD Target)**:
+  - 5개 서브에이전트 병렬 호출 1,000회 스트레스 테스트 시 데드락 없는 완료율 $\ge 99.5\%$.
+  - 4단계 재귀 진입 차단 및 순환 호출 체인 100% 탐지 차단 검증.
 
 #### 1. 기본 정보
 - **기능명**: 모듈러 다중 서브에이전트 비동기 동시 호출 (`invoke_subagents`) 및 메시지 버스
@@ -241,6 +281,20 @@ flowchart TD
 ---
 
 ### [FUNC-TOOL-001] 보안 Bash 및 툴 실행 엔진 (Secure Bash & Tool Execution Engine)
+
+#### 0. 대응 요구사항 및 인수 판정 기준 바인딩 (Requirements & Acceptance Criteria Binding)
+- **대응 요구사항 ID**: `REQ-TOOL-001` (보안 Bash 및 툴 실행 엔진)
+- **정상 판정 기준 (Happy Path)**:
+  - `@tool` 데코레이터가 적용된 임의의 파이썬 함수를 `ToolRegistry`에 등록하고, OpenAPI/JSON Schema 규격 메타데이터를 자동 생성해야 한다.
+  - 내장 Bash 도구 실행 시 허용된 작업 디렉토리(`cwd`) 내에서 명령(`pytest`, `git status` 등)을 실행하고 종료 코드, 표준 출력, 표준 에러를 반환해야 한다.
+- **예외/실패 판정 기준 (Edge/Exception Path)**:
+  - 실행 커맨드에 위험 명령어 블랙리스트(`rm -rf /`, `sudo`, `mkfs`, 포크 폭탄 등) 정규식 매칭 시 즉시 `DangerousCommandError` (`ERR_TOOL_COMMAND_BLOCKED`)를 발생시키고 실행을 거부해야 한다.
+  - `cd /` 또는 `../../` 등을 통해 작업 디렉토리 상위로 탈출을 시도하는 경로는 `PathTraversalError` (`ERR_TOOL_DIRECTORY_ESCAPE`)로 차단해야 한다.
+  - 커맨드 실행 시간이 `command_timeout`(기본 60초)을 초과할 경우 `os.killpg`를 호출하여 하위 프로세스 그룹 전체를 즉시 강제 종료하고 `CommandTimeoutError` (`ERR_TOOL_TIMEOUT`)를 반환해야 한다.
+  - 출력 버퍼가 1MB를 초과하면 버퍼 오버플로우 방지를 위해 앞부분 1MB만 보존하고 나머지는 절삭(Truncate)해야 한다.
+- **단위 테스트 검증 조건 (TDD Target)**:
+  - 위험 명령어 50종 모의 주입 시 차단율 $100\%$ (완전 차단).
+  - 60초 초과 슬립 명령 강제 종료 후 좀비 프로세스 잔존 $0\text{건}$.
 
 #### 1. 기본 정보
 - **기능명**: 보안 Bash 및 툴 실행 엔진 (`ToolRegistry`, `@tool`)
@@ -322,6 +376,18 @@ flowchart TD
 ---
 
 ### [FUNC-SKIL-001] 독립 스킬 온디맨드 프로그레시브 주입 (Skill Isolation & Progressive Disclosure)
+
+#### 0. 대응 요구사항 및 인수 판정 기준 바인딩 (Requirements & Acceptance Criteria Binding)
+- **대응 요구사항 ID**: `REQ-SKIL-001` (독립 스킬 온디맨드 프로그레시브 주입)
+- **정상 판정 기준 (Happy Path)**:
+  - 서브에이전트 매니페스트에 선언된 스킬 목록(`skills: [git, humanizer]`)에 해당하는 스킬 마크다운 파일만 컨텍스트에 점진적으로 주입해야 한다.
+  - 주입된 스킬 가이드는 불변 캐시되어 세션 내 동일 스킬 재요청 시 파싱 지연 없이 즉시 제공되어야 한다.
+- **예외/실패 판정 기준 (Edge/Exception Path)**:
+  - 스킬 파일 본문 내에서 타 스킬을 참조하거나 임포트하는 행위(`skill:`, `import`, `@skill` 등) 감지 시 정적 린터가 `SkillIsolationViolationError` (`ERR_SKIL_MUTUAL_REF`)를 발생시키며 세션 컴파일을 전면 거부해야 한다.
+  - 선언부에 기재된 스킬이 `.agents/skills`에 존재하지 않을 경우 `SkillNotFoundError` (`ERR_SKIL_NOT_FOUND`)를 발생시켜야 한다.
+- **단위 테스트 검증 조건 (TDD Target)**:
+  - 스킬 간 상호 참조를 포함하는 모의 마크다운 파일 10종 대상 정적 린트 차단율 $100\%$ (Zero Tolerance).
+  - 불필요한 미사용 스킬의 프롬프트 컨텍스트 유입 $0\text{건}$.
 
 #### 1. 기본 정보
 - **기능명**: 독립 스킬(Skill Isolation) 온디맨드 프로그레시브 주입 및 무결성 검증
